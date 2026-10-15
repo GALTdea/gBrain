@@ -1,14 +1,21 @@
 {
-  "name": "temp-app",
+  "name": "gbrain",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^9.3.1",
+    "@google-cloud/vertexai": "^1.12.0",
+    "@tiptap/pm": "^3.32.0",
+    "@tiptap/react": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
+    "daisyui": "^5.7.50",
+    "firebase": "^13.0.0",
     "next": "16.4.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
