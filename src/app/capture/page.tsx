@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { saveNote } from "@/lib/notes/notes-service";
 import { Note } from "@/types/note";
 import LoginForm from "@/components/auth/LoginForm";
+import VoiceRecorder from "@/components/voice/VoiceRecorder";
 
 function CaptureInner() {
   const searchParams = useSearchParams();
@@ -160,9 +161,27 @@ function CaptureInner() {
 
             {/* Note Preview Card */}
             <div className="text-left bg-base-100/80 border border-base-300 rounded-xl p-4 space-y-2">
-              <div className="font-bold text-sm text-base-content line-clamp-1">
-                {savedNote.title}
+              <div className="flex items-center gap-1.5">
+                {savedNote.audioUrl && (
+                  <span className="badge badge-secondary badge-xs font-medium">
+                    🎙️ Voice Memo
+                  </span>
+                )}
+                <div className="font-bold text-sm text-base-content line-clamp-1">
+                  {savedNote.title}
+                </div>
               </div>
+
+              {savedNote.audioUrl && (
+                <div className="pt-1">
+                  <audio
+                    controls
+                    src={savedNote.audioUrl}
+                    className="w-full h-8 rounded opacity-90"
+                  />
+                </div>
+              )}
+
               <p className="text-xs text-base-content/70 line-clamp-3 leading-relaxed">
                 {savedNote.plain_text}
               </p>
@@ -267,6 +286,22 @@ function CaptureInner() {
               Save to Second Brain
             </button>
           </form>
+
+          {/* Multimodal Voice Memo Quick Capture */}
+          <div className="divider text-[10px] text-base-content/40 my-1 uppercase tracking-wider font-mono">
+            Or Record Voice Memo
+          </div>
+
+          <div className="flex flex-col items-center justify-center p-3 bg-base-100/50 rounded-xl border border-dashed border-base-300 gap-2">
+            <span className="text-xs text-base-content/60 text-center">
+              Dictate a note with multimodal Gemini 1.5 Flash transcription:
+            </span>
+            <VoiceRecorder
+              onNoteCreated={(note) => {
+                setSavedNote(note);
+              }}
+            />
+          </div>
 
           <div className="text-center pt-2">
             <Link href="/dashboard" className="text-xs text-base-content/60 hover:text-primary transition-colors">

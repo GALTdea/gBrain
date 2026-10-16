@@ -89,6 +89,8 @@ export function subscribeToUserNotes(
             plain_text: data.plain_text || "",
             tags: data.tags || [],
             embedding: data.embedding || undefined,
+            audioUrl: data.audioUrl || undefined,
+            audioStorageUri: data.audioStorageUri || undefined,
             userId: data.userId || userId,
             createdAt: data.createdAt || Date.now(),
             updatedAt: data.updatedAt || Date.now(),
@@ -126,6 +128,8 @@ export async function saveNote(
     tags?: string[];
     createdAt?: number;
     embedding?: number[];
+    audioUrl?: string;
+    audioStorageUri?: string;
   },
   previousPlainText?: string
 ): Promise<Note> {
@@ -140,7 +144,9 @@ export async function saveNote(
     content: note.content,
     plain_text: note.plain_text,
     tags: note.tags || [],
-    embedding: note.embedding,
+    ...(note.embedding !== undefined ? { embedding: note.embedding } : {}),
+    ...(note.audioUrl !== undefined ? { audioUrl: note.audioUrl } : {}),
+    ...(note.audioStorageUri !== undefined ? { audioStorageUri: note.audioStorageUri } : {}),
     userId,
     createdAt: note.createdAt || now,
     updatedAt: now,
@@ -202,9 +208,14 @@ export async function saveNote(
     return fullNote;
   }
 
+  // Strip any remaining undefined properties before sending to Firestore setDoc
+  const firestorePayload = Object.fromEntries(
+    Object.entries(fullNote).filter(([, value]) => value !== undefined)
+  );
+
   // Firestore Write to users/{userId}/notes/{noteId}
   const noteRef = doc(db, "users", userId, "notes", note.id);
-  await setDoc(noteRef, fullNote, { merge: true });
+  await setDoc(noteRef, firestorePayload, { merge: true });
   return fullNote;
 }
 

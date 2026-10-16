@@ -1,6 +1,13 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, Auth } from "firebase/auth";
-import { getFirestore, Firestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  Firestore,
+} from "firebase/firestore";
+import { getStorage, FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
@@ -19,13 +26,32 @@ export const isFirebaseConfigured = Boolean(
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
 let db: Firestore | undefined;
+let storage: FirebaseStorage | undefined;
 let googleProvider: GoogleAuthProvider | undefined;
 
 if (isFirebaseConfigured) {
   try {
-    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    const isExistingApp = getApps().length > 0;
+    app = isExistingApp ? getApp() : initializeApp(firebaseConfig);
     auth = getAuth(app);
-    db = getFirestore(app);
+
+    if (typeof window !== "undefined" && !isExistingApp) {
+      try {
+        db = initializeFirestore(app, {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        });
+      } catch {
+        db = getFirestore(app);
+      }
+    } else {
+      db = getFirestore(app);
+    }
+
+    storage = getStorage(app);
+    storage.maxUploadRetryTime = 5000;
+    storage.maxOperationRetryTime = 5000;
     googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({ prompt: "select_account" });
   } catch (error) {
@@ -33,5 +59,6 @@ if (isFirebaseConfigured) {
   }
 }
 
-export { app, auth, db, googleProvider };
+export { app, auth, db, storage, googleProvider };
+
 

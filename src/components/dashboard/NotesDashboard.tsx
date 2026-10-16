@@ -1,11 +1,30 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { Note } from "@/types/note";
 import { subscribeToUserNotes, deleteNote } from "@/lib/notes/notes-service";
-import TipTapEditor from "@/components/editor/TipTapEditor";
-import ConversationalSearch from "@/components/search/ConversationalSearch";
+import VoiceRecorder from "@/components/voice/VoiceRecorder";
+
+const TipTapEditor = dynamic(() => import("@/components/editor/TipTapEditor"), {
+  loading: () => (
+    <div className="flex items-center justify-center py-16">
+      <span className="loading loading-spinner loading-md text-primary"></span>
+    </div>
+  ),
+});
+
+const ConversationalSearch = dynamic(
+  () => import("@/components/search/ConversationalSearch"),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center py-16">
+        <span className="loading loading-spinner loading-md text-primary"></span>
+      </div>
+    ),
+  }
+);
 
 export default function NotesDashboard() {
   const { user, signOut } = useAuth();
@@ -103,7 +122,7 @@ export default function NotesDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-lg tracking-tight">Second Brain</span>
-              <span className="badge badge-primary badge-sm font-semibold">Phase 4</span>
+              <span className="badge badge-primary badge-sm font-semibold">Phase 5</span>
             </div>
             <div className="text-[11px] text-base-content/60 font-mono flex items-center gap-1.5">
               <span>User: <strong>{user?.displayName || user?.email?.split("@")[0]}</strong></span>
@@ -113,17 +132,26 @@ export default function NotesDashboard() {
           </div>
         </div>
 
-        <div className="flex-none gap-2">
+        <div className="flex-none items-center gap-2">
           {!isCreatingNew && !activeEditingNote && (
-            <button
-              onClick={handleStartNewNote}
-              className="btn btn-primary btn-sm font-semibold shadow-md gap-1.5"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              New Note
-            </button>
+            <>
+              {/* Voice Recorder Action Button */}
+              <VoiceRecorder
+                onNoteCreated={(note) => {
+                  handleOpenNote(note);
+                }}
+              />
+
+              <button
+                onClick={handleStartNewNote}
+                className="btn btn-primary btn-sm font-semibold shadow-md gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Note
+              </button>
+            </>
           )}
 
           <button
@@ -291,21 +319,24 @@ export default function NotesDashboard() {
             <div className="card bg-base-200/40 border border-base-300 text-center p-12 shadow-sm">
               <div className="max-w-md mx-auto space-y-4">
                 <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center text-3xl mx-auto ring-1 ring-primary/20">
-                  📝
+                  🧠
                 </div>
-                <h3 className="text-xl font-bold">Your Second Brain is Empty</h3>
+                <h3 className="text-xl font-bold">Your Second Brain is Ready</h3>
                 <p className="text-sm text-base-content/60">
-                  Create your first note using the TipTap block editor. Rich formatting and plain text are automatically saved and prepared for future AI embeddings.
+                  Capture thoughts with the TipTap editor or record a voice memo. Gemini 1.5 Flash automatically transcribes, summarizes, and generates vector embeddings.
                 </p>
-                <button
-                  onClick={handleStartNewNote}
-                  className="btn btn-primary btn-sm font-semibold shadow-md gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Create First Note
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={handleStartNewNote}
+                    className="btn btn-primary btn-sm font-semibold shadow-md gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Create Note
+                  </button>
+                  <VoiceRecorder onNoteCreated={(note) => handleOpenNote(note)} />
+                </div>
               </div>
             </div>
           )}
@@ -329,13 +360,23 @@ export default function NotesDashboard() {
                   <div className="card-body p-5 space-y-2">
                     {/* Note Title & Delete Action */}
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-bold text-base line-clamp-1 group-hover:text-primary transition-colors">
-                        {note.title}
-                      </h4>
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        {note.audioUrl && (
+                          <span
+                            className="badge badge-secondary badge-xs shrink-0 font-medium"
+                            title="Voice Memo"
+                          >
+                            🎙️ Voice
+                          </span>
+                        )}
+                        <h4 className="font-bold text-base truncate group-hover:text-primary transition-colors">
+                          {note.title}
+                        </h4>
+                      </div>
                       <button
                         type="button"
                         onClick={(e) => handleDelete(e, note.id)}
-                        className="btn btn-ghost btn-xs btn-circle opacity-0 group-hover:opacity-100 hover:btn-error transition-opacity text-base-content/60"
+                        className="btn btn-ghost btn-xs btn-circle opacity-0 group-hover:opacity-100 hover:btn-error transition-opacity text-base-content/60 shrink-0"
                         title="Delete Note"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -343,6 +384,20 @@ export default function NotesDashboard() {
                         </svg>
                       </button>
                     </div>
+
+                    {/* Audio Player if recorded */}
+                    {note.audioUrl && (
+                      <div
+                        className="pt-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <audio
+                          controls
+                          src={note.audioUrl}
+                          className="w-full h-8 rounded opacity-85 hover:opacity-100"
+                        />
+                      </div>
+                    )}
 
                     {/* Plain Text Snippet (Derived from TipTap) */}
                     <p className="text-xs text-base-content/70 line-clamp-3 leading-relaxed">

@@ -17,6 +17,7 @@ export const getAdminFirestore = (): Firestore => {
 
     adminDb = new Firestore({
       projectId: projectId || undefined,
+      ignoreUndefinedProperties: true,
     });
   }
   return adminDb;
@@ -44,11 +45,17 @@ export const getVertexAI = (): VertexAI => {
 };
 
 /**
- * Google Gen AI client configured for Vertex AI backend.
+ * Google Gen AI client configured for Gemini API Key (if provided) or Vertex AI backend.
  */
 let genAIClient: GoogleGenAI | null = null;
 export const getGenAIClient = (): GoogleGenAI => {
   if (!genAIClient) {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (apiKey) {
+      genAIClient = new GoogleGenAI({ apiKey });
+      return genAIClient;
+    }
+
     const project =
       process.env.GOOGLE_CLOUD_PROJECT ||
       process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -197,3 +204,198 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   const denom = Math.sqrt(normA) * Math.sqrt(normB);
   return denom === 0 ? 0 : dotProduct / denom;
 }
+
+export interface VoiceMemoAnalysis {
+  title: string;
+  summary: string;
+  transcript: string;
+  tags: string[];
+}
+
+export interface ProcessVoiceMemoParams {
+  audioStorageUri?: string;
+  audioBase64?: string;
+  mimeType: string;
+  browserTranscript?: string;
+}
+
+/**
+ * Multimodal audio processing using Gemini 1.5 Flash via Vertex AI,
+ * with live browser SpeechRecognition transcript fallback when billing/ADC is not active.
+ */
+export async function processMultimodalVoiceMemo(
+  params: ProcessVoiceMemoParams
+): Promise<VoiceMemoAnalysis> {
+  const { audioStorageUri, audioBase64, mimeType, browserTranscript } = params;
+
+  const promptText = `You are Second Brain AI's voice intelligence module for Gustavo and Gianna.
+Listen carefully to the provided audio recording.${
+    browserTranscript
+      ? `\nInitial live speech recognition transcript for reference: "${browserTranscript}"`
+      : ""
+  }
+1. Provide a clean, verbatim transcription of everything said in the recording.
+2. Generate a concise high-level summary (1-3 sentences) capturing the core ideas or decisions.
+3. Suggest a concise, informative title (3-7 words).
+4. Suggest 2-5 relevant tags (always include "voice-memo").
+
+You must return valid JSON with exactly these keys:
+{
+  "title": "string",
+  "summary": "string",
+  "transcript": "string",
+  "tags": ["voice-memo", "tag1"]
+}`;
+
+  try {
+    const client = getGenAIClient();
+    const parts: Array<Record<string, unknown>> = [];
+
+    if (audioStorageUri) {
+      parts.push({
+        fileData: {
+          fileUri: audioStorageUri,
+          mimeType: mimeType || "audio/webm",
+        },
+      });
+    } else if (audioBase64) {
+      const cleanBase64 = audioBase64.replace(/^data:audio\/[^;]+;base64,/, "");
+      parts.push({
+        inlineData: {
+          mimeType: mimeType || "audio/webm",
+          data: cleanBase64,
+        },
+      });
+    }
+
+    parts.push({ text: promptText });
+
+    const result = await client.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: parts,
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.2,
+      },
+    });
+
+    if (result.text) {
+      let jsonStr = result.text.trim();
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.replace(/^```json/, "").replace(/```$/, "").trim();
+      } else if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.replace(/^```/, "").replace(/```$/, "").trim();
+      }
+
+      const parsed = JSON.parse(jsonStr);
+      return {
+        title: parsed.title || "Voice Memo",
+        summary: parsed.summary || "Voice recording summary",
+        transcript: parsed.transcript || browserTranscript || "No transcript generated.",
+        tags: Array.isArray(parsed.tags) ? parsed.tags : ["voice-memo"],
+      };
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(
+      "[Multimodal Voice] Gemini 1.5 Flash call deferred or offline:",
+      message
+    );
+  }
+
+  // If browser SpeechRecognition captured the spoken words, synthesize title, summary, and transcript directly!
+  const cleanTranscript = (browserTranscript || "").trim();
+  if (cleanTranscript) {
+    const words = cleanTranscript.split(/\s+/);
+    const titleWords = words.slice(0, 6).join(" ");
+    const formattedTitle =
+      titleWords.charAt(0).toUpperCase() +
+      titleWords.slice(1) +
+      (words.length > 6 ? "..." : "");
+
+    const summaryText =
+      cleanTranscript.length > 160
+        ? `${cleanTranscript.slice(0, 157).trim()}...`
+        : cleanTranscript;
+
+    return {
+      title: formattedTitle,
+      summary: summaryText,
+      transcript: cleanTranscript,
+      tags: ["voice-memo", "audio"],
+    };
+  }
+
+  // Graceful fallback if neither Vertex AI nor browser SpeechRecognition produced text
+  const dateStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return {
+    title: `Voice Memo (${dateStr})`,
+    summary: "Voice recording captured via Second Brain VoiceRecorder.",
+    transcript:
+      "No speech detected during recording (or Vertex AI billing is disabled and browser speech recognition was unavailable).",
+    tags: ["voice-memo", "audio"],
+  };
+}
+
+/**
+ * Formats voice memo summary and transcript into a TipTap document structure.
+ */
+export function formatVoiceTipTapDoc(summary: string, transcript: string, audioUrl?: string) {
+  const content: Array<Record<string, unknown>> = [];
+
+  if (audioUrl) {
+    content.push({
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: "🎵 Audio Recording: ",
+          marks: [{ type: "bold" }],
+        },
+        {
+          type: "text",
+          text: "Play Audio File",
+          marks: [{ type: "link", attrs: { href: audioUrl, target: "_blank" } }],
+        },
+      ],
+    });
+  }
+
+  content.push(
+    {
+      type: "heading",
+      attrs: { level: 3 },
+      content: [{ type: "text", text: "Summary" }],
+    },
+    {
+      type: "paragraph",
+      content: [{ type: "text", text: summary }],
+    },
+    {
+      type: "heading",
+      attrs: { level: 3 },
+      content: [{ type: "text", text: "Transcript" }],
+    }
+  );
+
+  const paragraphs = transcript.split("\n\n").filter(Boolean);
+  if (paragraphs.length > 0) {
+    paragraphs.forEach((p) => {
+      content.push({
+        type: "paragraph",
+        content: [{ type: "text", text: p }],
+      });
+    });
+  } else {
+    content.push({
+      type: "paragraph",
+      content: [{ type: "text", text: transcript || "No transcript available." }],
+    });
+  }
+
+  return {
+    type: "doc",
+    content,
+  };
+}
+

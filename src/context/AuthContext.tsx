@@ -23,6 +23,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AUTH_CACHE_KEY = "gbrain_cached_auth_user";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -32,11 +33,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!auth) return;
 
+    // Immediately hydrate cached user on mount so the UI doesn't wait for network token refresh
+    try {
+      const cached = localStorage.getItem(AUTH_CACHE_KEY);
+      if (cached) {
+        setUser(JSON.parse(cached) as User);
+        setLoading(false);
+      }
+    } catch {
+      // ignore storage errors
+    }
+
     const unsubscribe = onAuthStateChanged(
       auth,
       (currentUser) => {
         setUser(currentUser);
         setLoading(false);
+        try {
+          if (currentUser) {
+            localStorage.setItem(
+              AUTH_CACHE_KEY,
+              JSON.stringify({
+                uid: currentUser.uid,
+                email: currentUser.email,
+                displayName: currentUser.displayName,
+                photoURL: currentUser.photoURL,
+              })
+            );
+          } else {
+            localStorage.removeItem(AUTH_CACHE_KEY);
+          }
+        } catch {
+          // ignore storage errors
+        }
       },
       (err) => {
         console.error("Auth state error:", err);
@@ -86,6 +115,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     setError(null);
+    try {
+      localStorage.removeItem(AUTH_CACHE_KEY);
+    } catch {
+      // ignore
+    }
     if (auth) {
       await firebaseSignOut(auth);
     }
