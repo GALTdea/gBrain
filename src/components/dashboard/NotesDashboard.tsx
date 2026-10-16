@@ -5,11 +5,13 @@ import { useAuth } from "@/context/AuthContext";
 import { Note } from "@/types/note";
 import { subscribeToUserNotes, deleteNote } from "@/lib/notes/notes-service";
 import TipTapEditor from "@/components/editor/TipTapEditor";
+import ConversationalSearch from "@/components/search/ConversationalSearch";
 
 export default function NotesDashboard() {
   const { user, signOut } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<"notes" | "search">("notes");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [activeEditingNote, setActiveEditingNote] = useState<Note | null>(null);
@@ -19,7 +21,6 @@ export default function NotesDashboard() {
   useEffect(() => {
     if (!user?.uid) return;
 
-    setLoading(true);
     const unsubscribe = subscribeToUserNotes(
       user.uid,
       (fetchedNotes) => {
@@ -87,15 +88,7 @@ export default function NotesDashboard() {
     setIsCreatingNew(false);
   };
 
-  const formatRelativeTime = (timestamp: number) => {
-    const diff = Date.now() - timestamp;
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
+  const formatNoteDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
@@ -110,7 +103,7 @@ export default function NotesDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-lg tracking-tight">Second Brain</span>
-              <span className="badge badge-primary badge-sm font-semibold">Phase 2</span>
+              <span className="badge badge-primary badge-sm font-semibold">Phase 4</span>
             </div>
             <div className="text-[11px] text-base-content/60 font-mono flex items-center gap-1.5">
               <span>User: <strong>{user?.displayName || user?.email?.split("@")[0]}</strong></span>
@@ -162,8 +155,72 @@ export default function NotesDashboard() {
       {/* Notes Grid & Search View (when not editing) */}
       {!isCreatingNew && !activeEditingNote && (
         <section className="space-y-6">
-          {/* Search, Filter & Stats Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Navigation Tab Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-base-300 pb-3">
+            <div className="tabs tabs-boxed bg-base-200/80 p-1 rounded-xl flex max-w-sm">
+              <button
+                role="tab"
+                onClick={() => setActiveTab("notes")}
+                className={`tab flex-1 gap-2 font-medium transition-all ${
+                  activeTab === "notes" ? "tab-active font-bold shadow-sm" : ""
+                }`}
+              >
+                <span>📝</span>
+                <span>My Notes</span>
+                <span className="badge badge-sm badge-ghost">{notes.length}</span>
+              </button>
+              <button
+                role="tab"
+                onClick={() => setActiveTab("search")}
+                className={`tab flex-1 gap-2 font-medium transition-all ${
+                  activeTab === "search" ? "tab-active font-bold shadow-sm" : ""
+                }`}
+              >
+                <span>🧠</span>
+                <span>Search Your Brain</span>
+                <span className="badge badge-sm badge-primary">AI</span>
+              </button>
+            </div>
+
+            {activeTab === "notes" ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab("search")}
+                className="btn btn-ghost btn-xs text-primary gap-1.5 self-start sm:self-auto font-medium hover:bg-primary/10"
+              >
+                <span>✨ Ask AI about your notes</span>
+                <span>→</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setActiveTab("notes")}
+                className="btn btn-ghost btn-xs gap-1.5 self-start sm:self-auto font-medium"
+              >
+                <span>← Back to Notes</span>
+              </button>
+            )}
+          </div>
+
+          {/* Search Your Brain Tab */}
+          {activeTab === "search" && (
+            <div className="animate-in fade-in duration-200">
+              <ConversationalSearch
+                userId={user?.uid || ""}
+                notes={notes}
+                onOpenNote={(id) => {
+                  const matched = notes.find((n) => n.id === id);
+                  if (matched) handleOpenNote(matched);
+                }}
+              />
+            </div>
+          )}
+
+          {/* My Notes Tab */}
+          {activeTab === "notes" && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Search, Filter & Stats Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="relative flex-1 max-w-md">
               <svg
                 className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-base-content/40"
@@ -309,13 +366,15 @@ export default function NotesDashboard() {
 
                   {/* Footer metadata */}
                   <div className="px-5 py-2.5 border-t border-base-300/60 bg-base-300/20 text-[11px] text-base-content/50 font-mono flex items-center justify-between">
-                    <span>{formatRelativeTime(note.updatedAt)}</span>
+                    <span>{formatNoteDate(note.updatedAt)}</span>
                     <span className="text-[10px] uppercase text-primary/80 font-bold group-hover:underline">
                       Edit →
                     </span>
                   </div>
                 </div>
               ))}
+            </div>
+          )}
             </div>
           )}
         </section>

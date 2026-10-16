@@ -6,7 +6,6 @@ import {
   onSnapshot,
   query,
   orderBy,
-  getDocs,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "@/lib/firebase/client";
 import { Note } from "@/types/note";
@@ -89,6 +88,7 @@ export function subscribeToUserNotes(
             content: data.content || {},
             plain_text: data.plain_text || "",
             tags: data.tags || [],
+            embedding: data.embedding || undefined,
             userId: data.userId || userId,
             createdAt: data.createdAt || Date.now(),
             updatedAt: data.updatedAt || Date.now(),
@@ -103,26 +103,31 @@ export function subscribeToUserNotes(
     );
 
     return unsubscribe;
-  } catch (err: any) {
-    console.error("Firestore subscription failure:", err);
-    if (onError) onError(err);
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error("Firestore subscription failure:", error);
+    if (onError) onError(error);
     return () => {};
   }
 }
 
 /**
- * Creates or updates a note in users/{userId}/notes
+ * Creates or updates a note in users/{userId}/notes.
+ * When a note is created or its plain_text changes, calls /api/embed to generate a 768-dim
+ * text-embedding-004 vector and persists it to the Firestore document.
  */
 export async function saveNote(
   userId: string,
   note: {
     id: string;
     title: string;
-    content: any;
+    content: Note["content"];
     plain_text: string;
     tags?: string[];
     createdAt?: number;
-  }
+    embedding?: number[];
+  },
+  previousPlainText?: string
 ): Promise<Note> {
   if (!userId) {
     throw new Error("Cannot save note: User ID is required");
@@ -135,10 +140,52 @@ export async function saveNote(
     content: note.content,
     plain_text: note.plain_text,
     tags: note.tags || [],
+    embedding: note.embedding,
     userId,
     createdAt: note.createdAt || now,
     updatedAt: now,
   };
+
+  const plainTextChanged =
+    previousPlainText === undefined || previousPlainText !== note.plain_text || !note.embedding;
+
+  // Asynchronously trigger 768-dim embedding generation when created or plain_text changed
+  if (note.plain_text && plainTextChanged && typeof window !== "undefined") {
+    fetch("/api/embed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: note.plain_text,
+        userId,
+        noteId: note.id,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.embedding && Array.isArray(data.embedding)) {
+          fullNote.embedding = data.embedding;
+
+          // Write 768-dim float array into Firestore subcollection document
+          if (db && isFirebaseConfigured && !userId.startsWith("usr_")) {
+            const docRef = doc(db, "users", userId, "notes", note.id);
+            setDoc(docRef, { embedding: data.embedding, updatedAt: Date.now() }, { merge: true }).catch((err) =>
+              console.warn("[Embedding Service] Firestore embedding write deferred:", err)
+            );
+          } else {
+            // Update local demo notes for offline/demo mode
+            const demoNotes = getLocalDemoNotes(userId);
+            const idx = demoNotes.findIndex((n) => n.id === note.id);
+            if (idx >= 0) {
+              demoNotes[idx].embedding = data.embedding;
+              saveLocalDemoNotes(userId, demoNotes);
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("[Embedding Service] Background embedding generation deferred:", err);
+      });
+  }
 
   if (!db || !isFirebaseConfigured || userId.startsWith("usr_")) {
     const existing = getLocalDemoNotes(userId);

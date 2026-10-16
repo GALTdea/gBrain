@@ -31,7 +31,7 @@ export default function LoginForm() {
     try {
       setSubmitting(true);
       await signInWithEmail(email, password);
-    } catch (err: any) {
+    } catch {
       // Error is caught and stored in AuthContext
     } finally {
       setSubmitting(false);
@@ -44,7 +44,7 @@ export default function LoginForm() {
     try {
       setSubmitting(true);
       await signInWithGoogle();
-    } catch (err: any) {
+    } catch {
       // Handled in context
     } finally {
       setSubmitting(false);

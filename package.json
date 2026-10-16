@@ -11,6 +11,7 @@
   "dependencies": {
     "@google-cloud/firestore": "^9.3.1",
     "@google-cloud/vertexai": "^1.12.0",
+    "@google/genai": "^1.52.0",
     "@tiptap/pm": "^3.32.0",
     "@tiptap/react": "^3.32.0",
     "@tiptap/starter-kit": "^3.32.0",
@@ -21,6 +22,7 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

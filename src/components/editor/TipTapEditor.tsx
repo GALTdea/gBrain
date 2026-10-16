@@ -20,7 +20,7 @@ export default function TipTapEditor({
   onSaveSuccess,
 }: TipTapEditorProps) {
   const [noteId] = useState<string>(
-    initialNote?.id || `note_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+    () => initialNote?.id || `note_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
   );
   const [title, setTitle] = useState<string>(initialNote?.title || "");
   const [tags, setTags] = useState<string[]>(initialNote?.tags || []);
@@ -34,6 +34,7 @@ export default function TipTapEditor({
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef<boolean>(true);
+  const lastSavedPlainTextRef = useRef<string | undefined>(initialNote?.plain_text);
 
   // Initialize TipTap editor
   const editor = useEditor({
@@ -68,14 +69,22 @@ export default function TipTapEditor({
 
       try {
         setSaveStatus("saving");
-        const saved = await saveNote(userId, {
-          id: noteId,
-          title: finalTitle,
-          content: rawJson,
-          plain_text: plainText,
-          tags: activeTags,
-          createdAt: initialNote?.createdAt,
-        });
+        const prevPlainText = lastSavedPlainTextRef.current;
+        const saved = await saveNote(
+          userId,
+          {
+            id: noteId,
+            title: finalTitle,
+            content: rawJson,
+            plain_text: plainText,
+            tags: activeTags,
+            createdAt: initialNote?.createdAt,
+            embedding: initialNote?.embedding,
+          },
+          prevPlainText
+        );
+
+        lastSavedPlainTextRef.current = plainText;
 
         if (isMountedRef.current) {
           setSaveStatus("saved");

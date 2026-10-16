@@ -26,14 +26,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(() => Boolean(auth));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!auth) {
-      setLoading(false);
-      return;
-    }
+    if (!auth) return;
 
     const unsubscribe = onAuthStateChanged(
       auth,
@@ -58,12 +55,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-    } catch (err: any) {
-      const message = err.code === "auth/invalid-credential"
-        ? "Invalid email or password."
-        : err.code === "auth/user-not-found"
-        ? "Account not found. Open signups are disabled."
-        : err.message || "Failed to sign in.";
+    } catch (err: unknown) {
+      const authErr = err as { code?: string; message?: string };
+      const message =
+        authErr.code === "auth/invalid-credential"
+          ? "Invalid email or password."
+          : authErr.code === "auth/user-not-found"
+          ? "Account not found. Open signups are disabled."
+          : authErr.message || "Failed to sign in.";
       setError(message);
       throw err;
     }
@@ -76,9 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
-      if (err.code !== "auth/popup-closed-by-user") {
-        setError(err.message || "Google sign-in failed.");
+    } catch (err: unknown) {
+      const authErr = err as { code?: string; message?: string };
+      if (authErr.code !== "auth/popup-closed-by-user") {
+        setError(authErr.message || "Google sign-in failed.");
       }
       throw err;
     }
@@ -106,7 +106,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantId: null,
       delete: async () => {},
       getIdToken: async () => "mock-token",
-      getIdTokenResult: async () => ({} as any),
+      getIdTokenResult: async () => ({
+        token: "mock-token",
+        authTime: "0",
+        issuedAtTime: "0",
+        expirationTime: "0",
+        signInProvider: "demo",
+        signInSecondFactor: null,
+        claims: {},
+      }),
       reload: async () => {},
       toJSON: () => ({}),
       phoneNumber: null,
