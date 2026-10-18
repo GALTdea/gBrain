@@ -15,14 +15,16 @@ interface ConversationalSearchProps {
   userId: string;
   notes: Note[];
   onOpenNote?: (noteId: string) => void;
+  initialQuery?: string;
 }
 
 export default function ConversationalSearch({
   userId,
   notes,
   onOpenNote,
+  initialQuery = "",
 }: ConversationalSearchProps) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState<string>("");
   const [answer, setAnswer] = useState<string | null>(null);
@@ -425,7 +427,7 @@ export default function ConversationalSearch({
                                   }}
                                   className="btn btn-outline btn-primary btn-xs font-semibold gap-1"
                                 >
-                                  <span>Open in TipTap Editor</span>
+                                  <span>Open Note</span>
                                   <span>→</span>
                                 </button>
                               )}

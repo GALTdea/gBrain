@@ -40,7 +40,7 @@ export default function DashboardPage() {
         <DashboardContent />
         <footer className="footer footer-center p-4 text-xs text-base-content/40 border-t border-base-300">
           <aside>
-            <p>Second Brain PWA • Phase 2 Dashboard &amp; TipTap Editor • Powered by Next.js &amp; Firestore</p>
+            <p>Second Brain • Gustavo &amp; Gianna</p>
           </aside>
         </footer>
       </div>
