@@ -34,7 +34,7 @@ export const getVertexAI = (): VertexAI => {
     const project =
       process.env.GOOGLE_CLOUD_PROJECT ||
       process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    const location = process.env.GOOGLE_CLOUD_LOCATION || "us-central1";
+    const location = process.env.VERTEX_AI_LOCATION || "us-central1";
 
     vertexAI = new VertexAI({
       project: project || "",
@@ -59,7 +59,7 @@ export const getGenAIClient = (): GoogleGenAI => {
     const project =
       process.env.GOOGLE_CLOUD_PROJECT ||
       process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    const location = process.env.GOOGLE_CLOUD_LOCATION || "us-central1";
+    const location = process.env.VERTEX_AI_LOCATION || "us-central1";
 
     genAIClient = new GoogleGenAI({
       vertexai: true,
@@ -69,6 +69,70 @@ export const getGenAIClient = (): GoogleGenAI => {
   }
   return genAIClient;
 };
+
+/**
+ * Candidate models supported across Gemini API versions and Vertex AI.
+ */
+export const CANDIDATE_GEMINI_MODELS = [
+  process.env.GEMINI_MODEL,
+  "gemini-3.5-flash",
+  "gemini-flash-latest",
+  "gemini-3.8-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-flash-lite-latest",
+  "gemini-2.5-flash",
+  "gemini-1.5-flash",
+].filter(Boolean) as string[];
+
+/**
+ * Fast-path direct REST caller for Gemini endpoints when GEMINI_API_KEY is provided.
+ */
+export async function callGeminiDirectRest(
+  apiKey: string,
+  prompt: string,
+  systemInstruction?: string,
+  preferredModel?: string
+): Promise<string | null> {
+  const candidateModels = preferredModel
+    ? [preferredModel, ...CANDIDATE_GEMINI_MODELS.filter((m) => m !== preferredModel)]
+    : CANDIDATE_GEMINI_MODELS;
+
+  for (const model of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const body: Record<string, unknown> = {
+        contents: [{ parts: [{ text: prompt }] }],
+      };
+      if (systemInstruction) {
+        body.systemInstruction = {
+          parts: [{ text: systemInstruction }],
+        };
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.warn(`[Gemini Direct REST] Model ${model} returned HTTP ${res.status}: ${errorText}`);
+        continue;
+      }
+
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        return text;
+      }
+    } catch (err) {
+      console.warn(`[Gemini Direct REST] Request failed for model ${model}:`, err);
+    }
+  }
+
+  return null;
+}
 
 /**
  * Deterministic fallback embedding generator for testing without GCP billing/credentials.
@@ -98,11 +162,43 @@ export async function generateTextEmbedding(text: string): Promise<number[]> {
     return new Array(768).fill(0);
   }
 
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+
+  // Direct REST fast-path for embedding with API key
+  if (apiKey) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "models/gemini-embedding-001",
+          content: { parts: [{ text: cleanText }] },
+          outputDimensionality: 768,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const vals = data?.embedding?.values;
+        if (vals && Array.isArray(vals) && vals.length === 768) {
+          return vals;
+        }
+      } else {
+        const errBody = await res.text();
+        console.warn(`[Gemini Embed] Direct REST embedContent returned ${res.status}:`, errBody);
+      }
+    } catch (embedRestErr) {
+      console.warn("[Gemini Embed] Direct REST embedContent failed, trying SDK:", embedRestErr);
+    }
+  }
+
   try {
     const client = getGenAIClient();
     const result = await client.models.embedContent({
-      model: "text-embedding-004",
+      model: apiKey ? "gemini-embedding-001" : "text-embedding-004",
       contents: cleanText,
+      config: apiKey ? { outputDimensionality: 768 } : undefined,
     });
 
     const candidateResult = result as {
@@ -128,12 +224,17 @@ export async function generateTextEmbedding(text: string): Promise<number[]> {
 }
 
 /**
- * Synthesizes a conversational answer using Gemini 1.5 Flash grounded strictly in user notes.
+ * Synthesizes a conversational answer using Gemini grounded strictly in user notes.
  */
 export async function generateRAGAnswer(
   query: string,
-  notes: Array<{ id: string; title: string; plain_text: string }>
+  notes: Array<{ id: string; title: string; plain_text: string }>,
+  customSystemInstruction?: string
 ): Promise<string> {
+  if (notes.length === 0) {
+    return `I couldn't find information regarding that in your Second Brain notes.`;
+  }
+
   const notesContext = notes
     .map(
       (n, i) =>
@@ -141,44 +242,73 @@ export async function generateRAGAnswer(
     )
     .join("\n---\n\n");
 
-  const prompt = `You are Second Brain AI, an intelligent personal knowledge assistant for Gustavo and Gianna.
-Answer the user's question clearly, concisely, and conversationally based ONLY on their personal notes provided below.
-Rules:
-1. Ground your answer strictly in the provided notes. Do not fabricate facts.
-2. Cite the note title using brackets like [Note: Title] whenever citing specific information.
-3. If the provided notes do not contain the answer, politely state: "I couldn't find information regarding that in your Second Brain notes."
-4. If multiple notes provide relevant context, synthesize them into a cohesive explanation.
+  const systemInstruction =
+    customSystemInstruction ||
+    "You are Second Brain AI, an intelligent personal knowledge assistant for Gustavo and Gianna.\n" +
+      "Analyze ALL provided notes that match the topic. Synthesize a unified, structured answer addressing each aspect of the user's question (e.g., break down by person, family, church if asked). Group insights conceptually rather than listing notes one by one. Cite every claim with [Note: Title] whenever citing specific information.\n" +
+      "Ground your answer strictly in the provided notes. Do not fabricate facts. If the provided notes do not contain the answer, politely state: \"I couldn't find information regarding that in your Second Brain notes.\"";
 
-User Question:
+  const prompt = `User Question:
 "${query}"
 
 User's Notes Context:
 ${notesContext || "No relevant notes found."}
 `;
 
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+
+  // Fast-path direct REST endpoint if GEMINI_API_KEY is present
+  if (apiKey) {
+    try {
+      const directAnswer = await callGeminiDirectRest(apiKey, prompt, systemInstruction);
+      if (directAnswer) {
+        return directAnswer;
+      }
+    } catch (directErr) {
+      console.error(
+        "[generateRAGAnswer] Direct Gemini REST call failed:",
+        directErr instanceof Error ? directErr.stack || directErr.message : directErr
+      );
+    }
+  }
+
+  // Vertex AI ADC fallback using candidate models
+  let lastError: unknown = null;
+
   try {
     const client = getGenAIClient();
-    const result = await client.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: prompt,
-    });
+    for (const model of CANDIDATE_GEMINI_MODELS) {
+      try {
+        const result = await client.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            systemInstruction,
+          },
+        });
 
-    if (result.text) {
-      return result.text;
+        if (result.text) {
+          return result.text;
+        }
+      } catch (modelErr: unknown) {
+        lastError = modelErr;
+        const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
+        console.warn(`[generateRAGAnswer] Model ${model} failed, trying next candidate:`, msg);
+      }
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.warn(
-      "[Vertex AI Gemini] Gemini API call deferred. Generating local synthesis:",
-      message
-    );
+    lastError = err;
   }
+
+  // Exact error logging inside the catch block as requested
+  console.error(
+    "[generateRAGAnswer] Gemini synthesis failed with error:",
+    lastError instanceof Error
+      ? { message: lastError.message, stack: lastError.stack, name: lastError.name }
+      : lastError
+  );
 
   // Fallback synthesis when offline or ADC is unconfigured
-  if (notes.length === 0) {
-    return `I couldn't find information regarding that in your Second Brain notes.`;
-  }
-
   const topNotes = notes.slice(0, 3);
   const citations = topNotes.map((n) => `[Note: "${n.title}"] (ID: ${n.id})`).join(", ");
   const summaries = topNotes
@@ -270,17 +400,28 @@ You must return valid JSON with exactly these keys:
 
     parts.push({ text: promptText });
 
-    const result = await client.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: parts,
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.2,
-      },
-    });
+    let voiceResult: { text?: string } | null = null;
+    for (const model of CANDIDATE_GEMINI_MODELS) {
+      try {
+        const result = await client.models.generateContent({
+          model,
+          contents: parts,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        });
+        if (result.text) {
+          voiceResult = result;
+          break;
+        }
+      } catch (voiceModelErr) {
+        console.warn(`[Multimodal Voice] Model ${model} failed, trying next candidate:`, voiceModelErr);
+      }
+    }
 
-    if (result.text) {
-      let jsonStr = result.text.trim();
+    if (voiceResult?.text) {
+      let jsonStr = voiceResult.text.trim();
       if (jsonStr.startsWith("```json")) {
         jsonStr = jsonStr.replace(/^```json/, "").replace(/```$/, "").trim();
       } else if (jsonStr.startsWith("```")) {
@@ -298,7 +439,7 @@ You must return valid JSON with exactly these keys:
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(
-      "[Multimodal Voice] Gemini 1.5 Flash call deferred or offline:",
+      "[Multimodal Voice] Gemini voice memo call deferred or offline:",
       message
     );
   }

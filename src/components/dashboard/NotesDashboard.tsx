@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { Note } from "@/types/note";
-import { subscribeToUserNotes, deleteNote, saveNote } from "@/lib/notes/notes-service";
+import { subscribeToUserNotes, deleteNote, saveNote, saveLocalDemoNotes } from "@/lib/notes/notes-service";
 import VoiceRecorder from "@/components/voice/VoiceRecorder";
 
 /**
@@ -107,6 +107,41 @@ export default function NotesDashboard() {
   const [activeEditingNote, setActiveEditingNote] = useState<Note | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
   const [isSavingQuickNote, setIsSavingQuickNote] = useState<boolean>(false);
+  const [isSeedingNotes, setIsSeedingNotes] = useState<boolean>(false);
+  const [seedFeedback, setSeedFeedback] = useState<string | null>(null);
+
+  const handleSeedNotes = async () => {
+    if (!user?.uid || isSeedingNotes) return;
+    setIsSeedingNotes(true);
+    setSeedFeedback("Importing 80 Keep notes & generating embeddings...");
+    try {
+      const res = await fetch("/api/seed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.uid }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to seed notes");
+      }
+      if (Array.isArray(data.notes) && data.notes.length > 0) {
+        setNotes(data.notes);
+        if (user.uid.startsWith("usr_")) {
+          saveLocalDemoNotes(user.uid, data.notes);
+          window.dispatchEvent(new Event("gbrain-notes-updated"));
+        }
+      }
+      setSeedFeedback(`Imported ${data.notesCount || 80} Keep notes!`);
+      setTimeout(() => setSeedFeedback(null), 4000);
+    } catch (err: unknown) {
+      console.error("Failed to seed notes:", err);
+      const msg = err instanceof Error ? err.message : "Failed to import notes";
+      setSeedFeedback(`Error: ${msg}`);
+      setTimeout(() => setSeedFeedback(null), 5000);
+    } finally {
+      setIsSeedingNotes(false);
+    }
+  };
 
   // Subscribe to notes in users/{userId}/notes
   useEffect(() => {
@@ -247,6 +282,32 @@ export default function NotesDashboard() {
         </div>
 
         <div className="flex-none items-center gap-2">
+          {seedFeedback && (
+            <span className="badge badge-sm badge-info font-medium animate-pulse text-[11px] py-2 px-2.5">
+              {seedFeedback}
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={handleSeedNotes}
+            disabled={isSeedingNotes}
+            className="btn btn-sm btn-outline border-base-300 hover:border-primary text-xs font-semibold gap-1.5"
+            title="Import 80 notes from data/lords_favor_restoration_notes.md and compute embeddings"
+          >
+            {isSeedingNotes ? (
+              <>
+                <span className="loading loading-spinner loading-xs text-primary"></span>
+                <span>Seeding 80 Notes...</span>
+              </>
+            ) : (
+              <>
+                <span>📥</span>
+                <span>{notes.length >= 80 ? "Re-seed 80 Keep Notes" : "Import 80 Keep Notes"}</span>
+              </>
+            )}
+          </button>
+
           <button
             onClick={() => signOut()}
             className="btn btn-ghost btn-sm text-xs hover:btn-error"

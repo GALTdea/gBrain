@@ -26,23 +26,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_CACHE_KEY = "gbrain_cached_auth_user";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const cached = localStorage.getItem(AUTH_CACHE_KEY);
+      return cached ? (JSON.parse(cached) as User) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState<boolean>(() => Boolean(auth));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!auth) return;
-
-    // Immediately hydrate cached user on mount so the UI doesn't wait for network token refresh
-    try {
-      const cached = localStorage.getItem(AUTH_CACHE_KEY);
-      if (cached) {
-        setUser(JSON.parse(cached) as User);
-        setLoading(false);
-      }
-    } catch {
-      // ignore storage errors
-    }
 
     const unsubscribe = onAuthStateChanged(
       auth,

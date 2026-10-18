@@ -26,7 +26,7 @@ function getLocalDemoNotes(userId: string): Note[] {
   }
 }
 
-function saveLocalDemoNotes(userId: string, notes: Note[]): void {
+export function saveLocalDemoNotes(userId: string, notes: Note[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(`${DEMO_STORAGE_PREFIX}${userId}`, JSON.stringify(notes));
