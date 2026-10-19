@@ -1,0 +1,27 @@
+# Settings for Firebase App Hosting
+# https://firebase.google.com/docs/app-hosting/configure
+
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 1024
+
+env:
+  - variable: GOOGLE_CLOUD_PROJECT
+    value: gbrain-befe7
+  - variable: GOOGLE_CLOUD_LOCATION
+    value: us-west2
+  - variable: VERTEX_AI_LOCATION
+    value: us-central1
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: gbrain-befe7
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: gbrain-befe7.firebaseapp.com
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: gbrain-befe7.firebasestorage.app
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "964990175045"
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:964990175045:web:c4f11233b46ea8e062a02c"
