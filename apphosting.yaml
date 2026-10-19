@@ -25,3 +25,4 @@ env:
     value: "964990175045"
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
     value: "1:964990175045:web:c4f11233b46ea8e062a02c"
+

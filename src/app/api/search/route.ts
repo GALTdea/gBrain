@@ -239,12 +239,42 @@ export async function POST(req: NextRequest) {
     const systemInstruction =
       "Analyze ALL provided notes that match the topic. Synthesize a unified, structured answer addressing each aspect of the user's question (e.g., break down by person, family, church if asked). Group insights conceptually rather than listing notes one by one. Cite every claim with [Note: Title].";
 
-    const answer = await generateRAGAnswer(cleanQuery, matchedNotes, systemInstruction);
+    let answer = "";
+    try {
+      answer = await generateRAGAnswer(cleanQuery, matchedNotes, systemInstruction);
+    } catch (synthesisErr: unknown) {
+      console.error("[Search Route - Gemini Synthesis Failed]:", synthesisErr);
+      const errMsg =
+        synthesisErr instanceof Error
+          ? synthesisErr.message
+          : String(synthesisErr || "Gemini synthesis failed");
+      const errStatus = (synthesisErr as any)?.status || 500;
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Gemini synthesis failed",
+          synthesisError: errMsg,
+          synthesisStatus: errStatus,
+          query: cleanQuery,
+          sources: matchedNotes.map(({ id, title, plain_text, tags, score }) => ({
+            id,
+            title,
+            snippet: plain_text.slice(0, 250),
+            tags: tags || [],
+            score: score !== undefined ? score : undefined,
+          })),
+          totalMatches: matchedNotes.length,
+        },
+        { status: errStatus }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       query: cleanQuery,
       answer,
+      synthesisError: null,
       usedVectorSearch,
       sources: matchedNotes.map(({ id, title, plain_text, tags, score }) => ({
         id,

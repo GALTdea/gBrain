@@ -44,6 +44,51 @@ export const getVertexAI = (): VertexAI => {
   return vertexAI;
 };
 
+export class SynthesisError extends Error {
+  status: number;
+  details?: unknown;
+  constructor(message: string, status = 500, details?: unknown) {
+    super(message);
+    this.name = "SynthesisError";
+    this.status = status;
+    this.details = details;
+  }
+}
+
+/**
+ * Sanitizes note text and queries to prevent malformed characters, null bytes,
+ * or control sequences from causing 400 Bad Request rejections in Gemini REST APIs.
+ */
+export function sanitizeTextForGemini(text: string): string {
+  if (!text || typeof text !== "string") return "";
+  return text
+    // Strip null bytes and non-printable control characters (preserving newline, carriage return, and tab)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "")
+    // Normalize unicode to prevent decomposed or invalid surrogate sequences
+    .normalize("NFC")
+    .trim();
+}
+
+/**
+ * Dedicated Vertex AI GoogleGenAI client initialized via ADC credentials.
+ */
+let vertexAIGenAIClient: GoogleGenAI | null = null;
+export const getVertexAIGenAIClient = (): GoogleGenAI => {
+  if (!vertexAIGenAIClient) {
+    const project =
+      process.env.GOOGLE_CLOUD_PROJECT ||
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    const location = process.env.VERTEX_AI_LOCATION || "us-central1";
+
+    vertexAIGenAIClient = new GoogleGenAI({
+      vertexai: true,
+      project: project || undefined,
+      location,
+    });
+  }
+  return vertexAIGenAIClient;
+};
+
 /**
  * Google Gen AI client configured for Gemini API Key (if provided) or Vertex AI backend.
  */
@@ -56,16 +101,7 @@ export const getGenAIClient = (): GoogleGenAI => {
       return genAIClient;
     }
 
-    const project =
-      process.env.GOOGLE_CLOUD_PROJECT ||
-      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    const location = process.env.VERTEX_AI_LOCATION || "us-central1";
-
-    genAIClient = new GoogleGenAI({
-      vertexai: true,
-      project: project || undefined,
-      location: location || "us-central1",
-    });
+    return getVertexAIGenAIClient();
   }
   return genAIClient;
 };
@@ -75,12 +111,12 @@ export const getGenAIClient = (): GoogleGenAI => {
  */
 export const CANDIDATE_GEMINI_MODELS = [
   process.env.GEMINI_MODEL,
+  "gemini-2.5-flash",
   "gemini-3.5-flash",
   "gemini-flash-latest",
   "gemini-3.8-flash",
   "gemini-3.1-flash-lite",
   "gemini-flash-lite-latest",
-  "gemini-2.5-flash",
   "gemini-1.5-flash",
 ].filter(Boolean) as string[];
 
@@ -92,10 +128,13 @@ export async function callGeminiDirectRest(
   prompt: string,
   systemInstruction?: string,
   preferredModel?: string
-): Promise<string | null> {
+): Promise<{ text?: string; error?: string; status?: number }> {
   const candidateModels = preferredModel
     ? [preferredModel, ...CANDIDATE_GEMINI_MODELS.filter((m) => m !== preferredModel)]
     : CANDIDATE_GEMINI_MODELS;
+
+  let lastStatus = 500;
+  let lastErrorMsg = "Gemini Direct REST failed";
 
   for (const model of candidateModels) {
     try {
@@ -115,23 +154,27 @@ export async function callGeminiDirectRest(
         body: JSON.stringify(body),
       });
 
+      lastStatus = res.status;
       if (!res.ok) {
         const errorText = await res.text();
-        console.warn(`[Gemini Direct REST] Model ${model} returned HTTP ${res.status}: ${errorText}`);
+        lastErrorMsg = `HTTP ${res.status} for model ${model}: ${errorText}`;
+        console.warn(`[Gemini Direct REST] ${lastErrorMsg}`);
         continue;
       }
 
       const data = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (text) {
-        return text;
+        return { text };
       }
     } catch (err) {
-      console.warn(`[Gemini Direct REST] Request failed for model ${model}:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      lastErrorMsg = `Request failed for model ${model}: ${msg}`;
+      console.warn(`[Gemini Direct REST] ${lastErrorMsg}`);
     }
   }
 
-  return null;
+  return { error: lastErrorMsg, status: lastStatus };
 }
 
 /**
@@ -157,14 +200,14 @@ export function generateDeterministicMockEmbedding(text: string, dimensions = 76
  * Generates a 768-dimensional vector embedding for text using Vertex AI text-embedding-004.
  */
 export async function generateTextEmbedding(text: string): Promise<number[]> {
-  const cleanText = text.trim();
+  const cleanText = sanitizeTextForGemini(text);
   if (!cleanText) {
     return new Array(768).fill(0);
   }
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
-  // Direct REST fast-path for embedding with API key
+  // Direct REST fast-path for embedding with API key if available
   if (apiKey) {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`;
@@ -193,12 +236,12 @@ export async function generateTextEmbedding(text: string): Promise<number[]> {
     }
   }
 
+  // Try Vertex AI with ADC (text-embedding-004)
   try {
-    const client = getGenAIClient();
+    const client = getVertexAIGenAIClient();
     const result = await client.models.embedContent({
-      model: apiKey ? "gemini-embedding-001" : "text-embedding-004",
+      model: "text-embedding-004",
       contents: cleanText,
-      config: apiKey ? { outputDimensionality: 768 } : undefined,
     });
 
     const candidateResult = result as {
@@ -235,36 +278,49 @@ export async function generateRAGAnswer(
     return `I couldn't find information regarding that in your Second Brain notes.`;
   }
 
+  // Sanitize all inputs to protect against malformed characters or URLs
+  const cleanQuery = sanitizeTextForGemini(query);
   const notesContext = notes
-    .map(
-      (n, i) =>
-        `[Note ${i + 1}: ${n.title}]\n${n.plain_text}\n`
-    )
+    .map((n, i) => {
+      const cleanTitle = sanitizeTextForGemini(n.title || "Untitled Note");
+      const cleanBody = sanitizeTextForGemini(n.plain_text || "");
+      if (!cleanBody && !cleanTitle) return null;
+      return `[Note ${i + 1}: ${cleanTitle}]\n${cleanBody}\n`;
+    })
+    .filter(Boolean)
     .join("\n---\n\n");
 
-  const systemInstruction =
+  const systemInstruction = sanitizeTextForGemini(
     customSystemInstruction ||
     "You are Second Brain AI, an intelligent personal knowledge assistant for Gustavo and Gianna.\n" +
       "Analyze ALL provided notes that match the topic. Synthesize a unified, structured answer addressing each aspect of the user's question (e.g., break down by person, family, church if asked). Group insights conceptually rather than listing notes one by one. Cite every claim with [Note: Title] whenever citing specific information.\n" +
-      "Ground your answer strictly in the provided notes. Do not fabricate facts. If the provided notes do not contain the answer, politely state: \"I couldn't find information regarding that in your Second Brain notes.\"";
+      "Ground your answer strictly in the provided notes. Do not fabricate facts. If the provided notes do not contain the answer, politely state: \"I couldn't find information regarding that in your Second Brain notes.\""
+  );
 
   const prompt = `User Question:
-"${query}"
+"${cleanQuery}"
 
 User's Notes Context:
 ${notesContext || "No relevant notes found."}
 `;
 
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  let lastError: unknown = null;
+  let lastStatus = 500;
 
-  // Fast-path direct REST endpoint if GEMINI_API_KEY is present
+  // 1. Fast-path direct REST endpoint if GEMINI_API_KEY is present
   if (apiKey) {
     try {
-      const directAnswer = await callGeminiDirectRest(apiKey, prompt, systemInstruction);
-      if (directAnswer) {
-        return directAnswer;
+      const directResult = await callGeminiDirectRest(apiKey, prompt, systemInstruction);
+      if (directResult.text) {
+        return directResult.text;
+      }
+      if (directResult.error) {
+        lastError = new Error(directResult.error);
+        if (directResult.status) lastStatus = directResult.status;
       }
     } catch (directErr) {
+      lastError = directErr;
       console.error(
         "[generateRAGAnswer] Direct Gemini REST call failed:",
         directErr instanceof Error ? directErr.stack || directErr.message : directErr
@@ -272,14 +328,12 @@ ${notesContext || "No relevant notes found."}
     }
   }
 
-  // Vertex AI ADC fallback using candidate models
-  let lastError: unknown = null;
-
+  // 2. Vertex AI with ADC (using GoogleGenAI with vertexai: true)
   try {
-    const client = getGenAIClient();
+    const vertexClient = getVertexAIGenAIClient();
     for (const model of CANDIDATE_GEMINI_MODELS) {
       try {
-        const result = await client.models.generateContent({
+        const result = await vertexClient.models.generateContent({
           model,
           contents: prompt,
           config: {
@@ -293,29 +347,50 @@ ${notesContext || "No relevant notes found."}
       } catch (modelErr: unknown) {
         lastError = modelErr;
         const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
-        console.warn(`[generateRAGAnswer] Model ${model} failed, trying next candidate:`, msg);
+        console.warn(`[generateRAGAnswer] Vertex model ${model} failed, trying next candidate:`, msg);
       }
     }
-  } catch (err: unknown) {
-    lastError = err;
+  } catch (vertexErr: unknown) {
+    lastError = vertexErr;
+    console.warn("[generateRAGAnswer] Vertex client failed:", vertexErr);
   }
 
-  // Exact error logging inside the catch block as requested
-  console.error(
-    "[generateRAGAnswer] Gemini synthesis failed with error:",
-    lastError instanceof Error
-      ? { message: lastError.message, stack: lastError.stack, name: lastError.name }
-      : lastError
-  );
+  // 3. Fallback to AI Studio SDK if available
+  if (apiKey) {
+    try {
+      const studioClient = new GoogleGenAI({ apiKey });
+      for (const model of CANDIDATE_GEMINI_MODELS) {
+        try {
+          const result = await studioClient.models.generateContent({
+            model,
+            contents: prompt,
+            config: {
+              systemInstruction,
+            },
+          });
+          if (result.text) {
+            return result.text;
+          }
+        } catch (studioErr) {
+          lastError = studioErr;
+        }
+      }
+    } catch (studioInitErr) {
+      lastError = studioInitErr;
+    }
+  }
 
-  // Fallback synthesis when offline or ADC is unconfigured
-  const topNotes = notes.slice(0, 3);
-  const citations = topNotes.map((n) => `[Note: "${n.title}"] (ID: ${n.id})`).join(", ");
-  const summaries = topNotes
-    .map((n) => `• From [Note: "${n.title}"]: ${n.plain_text.slice(0, 220)}...`)
-    .join("\n\n");
+  // Exact error logging
+  const finalErrorMessage =
+    lastError instanceof Error ? lastError.message : String(lastError || "Unknown synthesis failure");
+  console.error("[generateRAGAnswer] Gemini synthesis failed completely:", {
+    message: finalErrorMessage,
+    status: lastStatus,
+  });
 
-  return `Based on your notes (${citations}):\n\n${summaries}`;
+  // DO NOT silently fall back to the deterministic template!
+  // Throw a SynthesisError so the API route returns the exact error and HTTP status.
+  throw new SynthesisError(finalErrorMessage, lastStatus, lastError);
 }
 
 /**
