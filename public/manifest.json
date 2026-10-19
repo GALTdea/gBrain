@@ -22,14 +22,46 @@
     }
   ],
   "share_target": {
-    "action": "/capture",
-    "method": "GET",
-    "enctype": "application/x-www-form-urlencoded",
+    "action": "/capture-share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
     "params": {
       "title": "title",
       "text": "text",
-      "url": "url"
+      "url": "url",
+      "files": [
+        {
+          "name": "audio",
+          "accept": ["audio/*", ".m4a", ".mp3", ".wav", ".aac", ".webm", ".ogg"]
+        }
+      ]
     }
-  }
+  },
+  "shortcuts": [
+    {
+      "name": "Instant Voice Note",
+      "short_name": "Voice Note",
+      "description": "Start recording a voice thought immediately",
+      "url": "/capture?mode=voice&autostart=1",
+      "icons": [
+        {
+          "src": "/icons/icon-192.svg",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Quick Text Capture",
+      "short_name": "Capture",
+      "description": "Jot down a quick thought or link",
+      "url": "/capture",
+      "icons": [
+        {
+          "src": "/icons/icon-192.svg",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
 }
 

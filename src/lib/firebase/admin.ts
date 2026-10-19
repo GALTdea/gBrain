@@ -422,6 +422,11 @@ export interface ProcessVoiceMemoParams {
   audioBase64?: string;
   mimeType: string;
   browserTranscript?: string;
+  sharedContext?: {
+    title?: string;
+    text?: string;
+    url?: string;
+  };
 }
 
 /**
@@ -431,16 +436,25 @@ export interface ProcessVoiceMemoParams {
 export async function processMultimodalVoiceMemo(
   params: ProcessVoiceMemoParams
 ): Promise<VoiceMemoAnalysis> {
-  const { audioStorageUri, audioBase64, mimeType, browserTranscript } = params;
+  const { audioStorageUri, audioBase64, mimeType, browserTranscript, sharedContext } = params;
+
+  let contextDescription = "";
+  if (sharedContext?.url || sharedContext?.title || sharedContext?.text) {
+    contextDescription = `\n[Reference Context from another app]:\n`;
+    if (sharedContext.title) contextDescription += `- Title: ${sharedContext.title}\n`;
+    if (sharedContext.url) contextDescription += `- URL: ${sharedContext.url}\n`;
+    if (sharedContext.text) contextDescription += `- Snippet: ${sharedContext.text}\n`;
+    contextDescription += `The user is speaking about this referenced content. Synthesize their thoughts in connection with it.\n`;
+  }
 
   const promptText = `You are Second Brain AI's voice intelligence module for Gustavo and Gianna.
-Listen carefully to the provided audio recording.${
+Listen carefully to the provided audio recording.${contextDescription}${
     browserTranscript
       ? `\nInitial live speech recognition transcript for reference: "${browserTranscript}"`
       : ""
   }
 1. Provide a clean, verbatim transcription of everything said in the recording.
-2. Generate a concise high-level summary (1-3 sentences) capturing the core ideas or decisions.
+2. Generate a concise high-level summary (1-3 sentences) capturing the core ideas, decisions, or commentary on the referenced context.
 3. Suggest a concise, informative title (3-7 words).
 4. Suggest 2-5 relevant tags (always include "voice-memo").
 
@@ -553,11 +567,31 @@ You must return valid JSON with exactly these keys:
   };
 }
 
-/**
- * Formats voice memo summary and transcript into a TipTap document structure.
- */
-export function formatVoiceTipTapDoc(summary: string, transcript: string, audioUrl?: string) {
+export function formatVoiceTipTapDoc(
+  summary: string,
+  transcript: string,
+  audioUrl?: string,
+  sharedContext?: { title?: string; text?: string; url?: string }
+) {
   const content: Array<Record<string, unknown>> = [];
+
+  if (sharedContext?.url) {
+    content.push({
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: "🔗 Referenced Link: ",
+          marks: [{ type: "bold" }],
+        },
+        {
+          type: "text",
+          text: sharedContext.title || sharedContext.url,
+          marks: [{ type: "link", attrs: { href: sharedContext.url, target: "_blank" } }],
+        },
+      ],
+    });
+  }
 
   if (audioUrl) {
     content.push({

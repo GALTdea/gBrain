@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   },
 };
 
+import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
+
 export default function RootLayout({
   children,
 }: {
@@ -23,6 +25,7 @@ export default function RootLayout({
         className="min-h-screen bg-base-100 text-base-content antialiased font-sans flex flex-col"
         suppressHydrationWarning
       >
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>

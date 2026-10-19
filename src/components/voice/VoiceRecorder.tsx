@@ -1,15 +1,29 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { storage, isFirebaseConfigured } from "@/lib/firebase/client";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Note } from "@/types/note";
 import { saveNote } from "@/lib/notes/notes-service";
+import {
+  saveVoiceDraft,
+  appendDraftChunk,
+  deleteVoiceDraft,
+  getPendingVoiceDrafts,
+  VoiceDraft,
+} from "@/lib/voice/voice-draft-store";
 
 interface VoiceRecorderProps {
   onNoteCreated?: (note: Note) => void;
-  compact?: boolean; // For inline buttons vs full floating action bar
+  compact?: boolean;
+  autoStart?: boolean; // Instantly start recording when loaded (e.g. from shortcut)
+  targetNoteId?: string; // Append voice thought to this existing note
+  sharedContext?: {
+    title?: string;
+    text?: string;
+    url?: string;
+  };
   className?: string;
 }
 
@@ -38,32 +52,12 @@ function getSupportedMimeType(): { mimeType: string; extension: string } {
   return { mimeType: "", extension: "webm" };
 }
 
-// Minimal TypeScript declarations for Web Speech API
-interface SpeechRecognitionEvent extends Event {
-  resultIndex: number;
-  results: {
-    length: number;
-    [index: number]: {
-      isFinal: boolean;
-      [index: number]: { transcript: string };
-    };
-  };
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: Event) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
 export default function VoiceRecorder({
   onNoteCreated,
   compact = false,
+  autoStart = false,
+  targetNoteId,
+  sharedContext,
   className = "",
 }: VoiceRecorderProps) {
   const { user } = useAuth();
@@ -71,31 +65,58 @@ export default function VoiceRecorder({
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [recordSeconds, setRecordSeconds] = useState<number>(0);
-  const [liveTranscript, setLiveTranscript] = useState<string>("");
+  const [audioLevel, setAudioLevel] = useState<number>(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const isRecordingRef = useRef<boolean>(false);
-  const finalTranscriptRef = useRef<string>("");
-  const interimTranscriptRef = useRef<string>("");
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const currentDraftIdRef = useRef<string | null>(null);
 
-  // Clean up recording stream & timers on unmount
+  // Request screen wake lock so recording is not terminated if screen dims
+  const requestWakeLock = async () => {
+    try {
+      if ("wakeLock" in navigator && !wakeLockRef.current) {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+      }
+    } catch (err) {
+      console.warn("[VoiceRecorder] WakeLock request deferred:", err);
+    }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
+  };
+
+  // Haptic feedback trigger
+  const triggerHaptic = (ms = 40) => {
+    if (typeof window !== "undefined" && "vibrate" in navigator) {
+      try {
+        navigator.vibrate(ms);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  // Clean up recording stream, wakeLock, audio analysis & timers on unmount
   useEffect(() => {
     return () => {
       isRecordingRef.current = false;
+      releaseWakeLock();
       if (timerRef.current) clearInterval(timerRef.current);
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.onend = null;
-          recognitionRef.current.stop();
-        } catch {
-          // ignore
-        }
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
@@ -109,12 +130,9 @@ export default function VoiceRecorder({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const startRecording = async () => {
+  const startRecording = useCallback(async () => {
     setErrorMessage(null);
     setStatusMessage(null);
-    setLiveTranscript("");
-    finalTranscriptRef.current = "";
-    interimTranscriptRef.current = "";
 
     if (!navigator?.mediaDevices?.getUserMedia) {
       setErrorMessage("Audio recording is not supported in this browser.");
@@ -122,6 +140,9 @@ export default function VoiceRecorder({
     }
 
     try {
+      triggerHaptic(50);
+      await requestWakeLock();
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -131,83 +152,81 @@ export default function VoiceRecorder({
       });
       streamRef.current = stream;
 
-      const { mimeType } = getSupportedMimeType();
+      // Realtime Audio Visualizer with AudioContext (avoids speech recognition locks)
+      try {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx();
+          audioContextRef.current = audioCtx;
+          const sourceNode = audioCtx.createMediaStreamSource(stream);
+          const analyserNode = audioCtx.createAnalyser();
+          analyserNode.fftSize = 64;
+          sourceNode.connect(analyserNode);
+
+          const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+          const updateAudioLevel = () => {
+            if (!isRecordingRef.current) return;
+            analyserNode.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i];
+            }
+            const average = sum / dataArray.length;
+            setAudioLevel(Math.min(100, Math.round((average / 128) * 100)));
+            animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
+          };
+          updateAudioLevel();
+        }
+      } catch (audioCtxErr) {
+        console.warn("[VoiceRecorder] AudioContext visualizer skipped:", audioCtxErr);
+      }
+
+      const { mimeType, extension } = getSupportedMimeType();
       const options = mimeType ? { mimeType } : undefined;
 
       const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
+      // Create a persistent draft in IndexedDB
+      const draftId = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      currentDraftIdRef.current = draftId;
+
+      const initialDraft: VoiceDraft = {
+        id: draftId,
+        userId: user?.uid || "guest_user",
+        chunks: [],
+        mimeType: mediaRecorder.mimeType || mimeType || "audio/webm",
+        extension,
+        startedAt: Date.now(),
+        durationSeconds: 0,
+        status: "recording",
+        targetNoteId,
+        sharedContext,
+      };
+      await saveVoiceDraft(initialDraft);
+
+      // Collect audio chunks every 1 second and immediately append to IndexedDB for crash safety
+      let secondsCount = 0;
       mediaRecorder.ondataavailable = (event: BlobEvent) => {
         if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          appendDraftChunk(draftId, event.data, secondsCount);
         }
       };
 
-      // Start browser Web Speech API in parallel for instant live speech-to-text
-      if (typeof window !== "undefined") {
-        const SpeechRecognitionCtor =
-          (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionInstance })
-            .SpeechRecognition ||
-          (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionInstance })
-            .webkitSpeechRecognition;
-
-        if (SpeechRecognitionCtor) {
-          try {
-            const recognition = new SpeechRecognitionCtor();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = navigator.language || "en-US";
-
-            recognition.onresult = (event: SpeechRecognitionEvent) => {
-              let interim = "";
-              for (let i = event.resultIndex; i < event.results.length; i++) {
-                const res = event.results[i];
-                const text = res[0]?.transcript || "";
-                if (res.isFinal) {
-                  finalTranscriptRef.current += text + " ";
-                } else {
-                  interim += text;
-                }
-              }
-              interimTranscriptRef.current = interim;
-              const combined = `${finalTranscriptRef.current}${interim}`.trim();
-              setLiveTranscript(combined);
-            };
-
-            recognition.onerror = () => {
-              // Ignore non-fatal speech recognition errors
-            };
-
-            recognition.onend = () => {
-              // Restart recognition if still actively recording
-              if (isRecordingRef.current) {
-                try {
-                  recognition.start();
-                } catch {
-                  // ignore
-                }
-              }
-            };
-
-            recognition.start();
-            recognitionRef.current = recognition;
-          } catch (speechErr) {
-            console.warn("Web Speech API initialization skipped:", speechErr);
-          }
-        }
-      }
-
-      mediaRecorder.start(250); // collect chunks every 250ms
+      mediaRecorder.start(1000); // 1-second timeslice flush
       isRecordingRef.current = true;
       setIsRecording(true);
       setRecordSeconds(0);
 
       timerRef.current = setInterval(() => {
-        setRecordSeconds((prev) => prev + 1);
+        secondsCount += 1;
+        setRecordSeconds(secondsCount);
       }, 1000);
     } catch (err: unknown) {
       console.error("Microphone access error:", err);
+      releaseWakeLock();
       const msg =
         err instanceof Error
           ? err.message
@@ -216,22 +235,34 @@ export default function VoiceRecorder({
       isRecordingRef.current = false;
       setIsRecording(false);
     }
-  };
+  }, [user, targetNoteId, sharedContext]);
 
-  const cancelRecording = () => {
+  // Handle auto-start trigger on mount
+  useEffect(() => {
+    if (autoStart && !isRecording && !isProcessing) {
+      const timer = setTimeout(() => {
+        startRecording();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [autoStart, isRecording, isProcessing, startRecording]);
+
+  const cancelRecording = async () => {
+    triggerHaptic(20);
     isRecordingRef.current = false;
+    releaseWakeLock();
+
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
-      } catch {
-        // ignore
-      }
-      recognitionRef.current = null;
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
     }
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.onstop = null;
@@ -241,42 +272,43 @@ export default function VoiceRecorder({
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    if (currentDraftIdRef.current) {
+      await deleteVoiceDraft(currentDraftIdRef.current);
+      currentDraftIdRef.current = null;
+    }
     audioChunksRef.current = [];
-    finalTranscriptRef.current = "";
-    interimTranscriptRef.current = "";
-    setLiveTranscript("");
     setIsRecording(false);
     setRecordSeconds(0);
+    setAudioLevel(0);
     setStatusMessage(null);
   };
 
   const stopAndProcessRecording = async () => {
     if (!mediaRecorderRef.current || !isRecording) return;
 
+    triggerHaptic(40);
     isRecordingRef.current = false;
+    releaseWakeLock();
+
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
-      } catch {
-        // ignore
-      }
-      recognitionRef.current = null;
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
-
-    const capturedBrowserTranscript =
-      `${finalTranscriptRef.current}${interimTranscriptRef.current}`.trim() ||
-      liveTranscript.trim();
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
 
     setIsRecording(false);
     setIsProcessing(true);
-    setStatusMessage("Finalizing audio recording...");
+    setStatusMessage("Finalizing voice recording...");
 
     const recorder = mediaRecorderRef.current;
+    const draftId = currentDraftIdRef.current;
 
     recorder.onstop = async () => {
       // Release microphone tracks
@@ -304,7 +336,7 @@ export default function VoiceRecorder({
         let downloadUrl = "";
         let audioStorageUri = "";
 
-        // Attempt upload to Firebase Storage if configured (with a 4s timeout so unprovisioned Storage buckets don't hang)
+        // Attempt upload to Firebase Storage if configured (with a 4s timeout so local dev doesn't hang)
         if (storage && isFirebaseConfigured && user && !user.uid.startsWith("usr_")) {
           try {
             setStatusMessage("Uploading audio to Firebase Storage...");
@@ -345,7 +377,7 @@ export default function VoiceRecorder({
         });
 
         // Trigger /api/voice route for multimodal transcription and indexing
-        setStatusMessage("Transcribing & synthesizing voice note...");
+        setStatusMessage("Transcribing & synthesizing note with Gemini...");
         const response = await fetch("/api/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -355,7 +387,8 @@ export default function VoiceRecorder({
             audioUrl: downloadUrl || undefined,
             audioBase64: base64Data,
             mimeType: effectiveMimeType,
-            browserTranscript: capturedBrowserTranscript || undefined,
+            targetNoteId,
+            sharedContext,
           }),
         });
 
@@ -367,10 +400,20 @@ export default function VoiceRecorder({
         const data = await response.json();
         const createdNote: Note = data.note;
 
-        // Always persist via client-side saveNote so the authenticated user's session writes directly to Firestore
+        // Persist via client-side saveNote to ensure Firestore subcollection write with client auth
         await saveNote(userId, createdNote, createdNote.plain_text);
 
-        setStatusMessage("Voice memo saved & transcribed successfully!");
+        // Delete successful draft from IndexedDB
+        if (draftId) {
+          await deleteVoiceDraft(draftId);
+        }
+
+        triggerHaptic(60);
+        setStatusMessage(
+          targetNoteId
+            ? "Voice thought appended successfully!"
+            : "Voice memo synthesized & saved!"
+        );
         setTimeout(() => setStatusMessage(null), 3000);
 
         if (onNoteCreated) {
@@ -384,17 +427,15 @@ export default function VoiceRecorder({
       } finally {
         setIsProcessing(false);
         setRecordSeconds(0);
-        setLiveTranscript("");
-        finalTranscriptRef.current = "";
-        interimTranscriptRef.current = "";
+        setAudioLevel(0);
         audioChunksRef.current = [];
+        currentDraftIdRef.current = null;
       }
     };
 
     recorder.stop();
   };
 
-  // Rendering states:
   // 1. Processing state
   if (isProcessing) {
     return (
@@ -409,49 +450,52 @@ export default function VoiceRecorder({
     );
   }
 
-  // 2. Active recording state (pulsing red, live timer, stop & cancel buttons)
+  // 2. Active recording state (Pulsing waveform, live timer, stop & cancel)
   if (isRecording) {
     return (
       <div
-        className={`flex items-center gap-3 bg-error/10 border border-error/40 px-4 py-2 rounded-2xl shadow-lg backdrop-blur ${className}`}
+        className={`flex items-center justify-between gap-3 bg-error/10 border border-error/40 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur w-full max-w-md ${className}`}
       >
-        {/* Pulsing red recording dot */}
-        <div className="relative flex items-center justify-center w-4 h-4">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-error opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-error"></span>
-        </div>
-
-        {/* Live timer */}
-        <div className="font-mono text-xs font-semibold text-error tracking-wider">
-          REC {formatTimer(recordSeconds)}
-        </div>
-
-        {/* Dynamic audio waves animation */}
-        <div className="hidden sm:flex items-center gap-0.5 h-4">
-          <span className="w-1 bg-error/60 rounded-full h-2 animate-pulse"></span>
-          <span className="w-1 bg-error rounded-full h-4 animate-bounce"></span>
-          <span className="w-1 bg-error/80 rounded-full h-3 animate-pulse"></span>
-          <span className="w-1 bg-error rounded-full h-4 animate-bounce"></span>
-        </div>
-
-        {/* Live speech-to-text preview */}
-        {liveTranscript && (
-          <div className="max-w-[180px] sm:max-w-[260px] truncate text-xs text-base-content/80 italic">
-            &ldquo;{liveTranscript}&rdquo;
+        <div className="flex items-center gap-2.5">
+          {/* Pulsing red recording dot */}
+          <div className="relative flex items-center justify-center w-4 h-4 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-error opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-error"></span>
           </div>
-        )}
 
-        <div className="flex items-center gap-2">
+          {/* Live timer */}
+          <div className="font-mono text-xs font-bold text-error tracking-wider">
+            REC {formatTimer(recordSeconds)}
+          </div>
+
+          {/* Dynamic Audio Level Meter */}
+          <div className="flex items-center gap-0.5 h-4 ml-1">
+            <span
+              className="w-1 bg-error rounded-full transition-all duration-75"
+              style={{ height: `${Math.max(4, (audioLevel / 100) * 16)}px` }}
+            />
+            <span
+              className="w-1 bg-error rounded-full transition-all duration-75"
+              style={{ height: `${Math.max(4, ((audioLevel * 1.2) / 100) * 16)}px` }}
+            />
+            <span
+              className="w-1 bg-error rounded-full transition-all duration-75"
+              style={{ height: `${Math.max(4, ((audioLevel * 0.8) / 100) * 16)}px` }}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
           {/* Stop and Save Button */}
           <button
             type="button"
             onClick={stopAndProcessRecording}
-            className="btn btn-error btn-xs rounded-xl gap-1 text-white shadow-sm hover:scale-105 transition-all"
+            className="btn btn-error btn-sm rounded-xl gap-1.5 text-white font-semibold shadow-md active:scale-95 transition-all"
             title="Stop recording and transcribe note"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="w-3.5 h-3.5 fill-current"
+              className="w-4 h-4 fill-current"
               viewBox="0 0 24 24"
             >
               <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -521,7 +565,7 @@ export default function VoiceRecorder({
         <button
           type="button"
           onClick={startRecording}
-          className="btn btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/10 hover:text-primary rounded-xl gap-2 font-medium transition-all shadow-sm"
+          className="btn btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/10 hover:text-primary rounded-xl gap-2 font-medium transition-all shadow-sm active:scale-95"
           title="Record Voice Memo with Gemini AI"
         >
           <svg
@@ -544,4 +588,3 @@ export default function VoiceRecorder({
     </div>
   );
 }
-

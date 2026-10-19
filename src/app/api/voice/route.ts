@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
       mimeType = "audio/webm",
       browserTranscript,
       noteId: customNoteId,
+      targetNoteId,
+      sharedContext,
     } = body;
 
     if (!userId || typeof userId !== "string") {
@@ -43,27 +45,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Step 1: Process multimodal audio via Gemini 1.5 Flash (transcription, summary, tags)
+    // Step 1: Process multimodal audio via Gemini 1.5 Flash (transcription, summary, tags, shared context)
     const analysis = await processMultimodalVoiceMemo({
       audioStorageUri,
       audioBase64,
       mimeType,
       browserTranscript,
+      sharedContext,
     });
 
     const noteId =
+      targetNoteId ||
       customNoteId ||
       `voice_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    // Step 2: Format TipTap rich text document with audio link & structured headings
+    // Step 2: Format TipTap rich text document with audio link, structured headings, and shared context
     const tipTapDoc = formatVoiceTipTapDoc(
       analysis.summary,
       analysis.transcript,
-      audioUrl
+      audioUrl,
+      sharedContext
     );
 
     // Step 3: Combine plain text for vector search & embeddings
-    const plainText = `${analysis.title}\n\nSummary:\n${analysis.summary}\n\nTranscript:\n${analysis.transcript}`;
+    let plainText = `${analysis.title}\n\nSummary:\n${analysis.summary}\n\nTranscript:\n${analysis.transcript}`;
+    if (sharedContext?.url) {
+      plainText = `Referenced: ${sharedContext.title || sharedContext.url}\nURL: ${sharedContext.url}\n\n${plainText}`;
+    }
 
     // Step 4: Generate 768-dim embedding for Phase 4 RAG search
     const embedding = await generateTextEmbedding(plainText);

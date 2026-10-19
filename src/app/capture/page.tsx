@@ -8,6 +8,11 @@ import { saveNote } from "@/lib/notes/notes-service";
 import { Note } from "@/types/note";
 import LoginForm from "@/components/auth/LoginForm";
 import VoiceRecorder from "@/components/voice/VoiceRecorder";
+import {
+  getSharedMediaPayload,
+  deleteSharedMediaPayload,
+  SharedMediaPayload,
+} from "@/lib/voice/voice-draft-store";
 
 function CaptureInner() {
   const searchParams = useSearchParams();
@@ -16,10 +21,21 @@ function CaptureInner() {
   const titleParam = searchParams.get("title") || "";
   const textParam = searchParams.get("text") || "";
   const urlParam = searchParams.get("url") || "";
+  const modeParam = searchParams.get("mode") || "";
+  const autostartParam = searchParams.get("autostart") === "1";
+  const shareIdParam = searchParams.get("shareId") || "";
+  const audioSharedParam = searchParams.get("audioShared") === "1";
 
   const [saving, setSaving] = useState(false);
   const [savedNote, setSavedNote] = useState<Note | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Appending voice thought state for shared link confirmation view
+  const [isAppendingVoice, setIsAppendingVoice] = useState(false);
+
+  // Shared audio file processing from Service Worker
+  const [processingSharedAudio, setProcessingSharedAudio] = useState(false);
+  const [sharedAudioStatus, setSharedAudioStatus] = useState<string | null>(null);
 
   // Manual fallback inputs (Rule 4 fallback)
   const [manualTitle, setManualTitle] = useState(titleParam);
@@ -28,6 +44,7 @@ function CaptureInner() {
   );
 
   const hasAutoSavedRef = useRef(false);
+  const hasProcessedSharedAudioRef = useRef(false);
 
   const executeSave = useCallback(
     async (title: string, text: string, url: string) => {
@@ -92,9 +109,82 @@ function CaptureInner() {
     [user]
   );
 
-  // Auto-save when URL parameters are provided and user is authenticated
+  // Process shared audio file from Service Worker (e.g. from Pixel Recorder)
+  useEffect(() => {
+    if (!user?.uid || hasProcessedSharedAudioRef.current) return;
+    if (!shareIdParam || !audioSharedParam) return;
+
+    hasProcessedSharedAudioRef.current = true;
+
+    async function processSharedAudio() {
+      try {
+        setProcessingSharedAudio(true);
+        setSharedAudioStatus("Retrieving shared audio from Pixel Recorder...");
+
+        const shared = await getSharedMediaPayload(shareIdParam);
+        if (!shared || !shared.audioBlob) {
+          throw new Error("Shared audio recording could not be retrieved from cache.");
+        }
+
+        setSharedAudioStatus("Converting audio for Gemini multimodal analysis...");
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(shared.audioBlob!);
+        });
+
+        if (!user?.uid) {
+          throw new Error("User session required to process shared audio.");
+        }
+
+        setSharedAudioStatus("Synthesizing transcript and notes with Gemini 1.5 Flash...");
+        const response = await fetch("/api/voice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.uid,
+            audioBase64: base64Data,
+            mimeType: shared.audioType || "audio/m4a",
+            sharedContext: {
+              title: shared.title,
+              text: shared.text,
+              url: shared.url,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || "Failed to process shared audio recording.");
+        }
+
+        const data = await response.json();
+        const createdNote: Note = data.note;
+
+        // Persist to user subcollection
+        await saveNote(user.uid, createdNote, createdNote.plain_text);
+        await deleteSharedMediaPayload(shareIdParam);
+
+        setSavedNote(createdNote);
+      } catch (err: unknown) {
+        console.error("Shared audio processing error:", err);
+        const msg = err instanceof Error ? err.message : "Failed to process shared audio.";
+        setError(msg);
+      } finally {
+        setProcessingSharedAudio(false);
+        setSharedAudioStatus(null);
+      }
+    }
+
+    processSharedAudio();
+  }, [user, shareIdParam, audioSharedParam]);
+
+  // Auto-save when URL/Text parameters are provided without audio
   useEffect(() => {
     if (!user?.uid || hasAutoSavedRef.current) return;
+    // Don't auto-save if an audio file was shared or if in voice mode
+    if (audioSharedParam || modeParam === "voice") return;
 
     const hasIncomingContent = Boolean(titleParam.trim() || textParam.trim() || urlParam.trim());
     if (!hasIncomingContent) return;
@@ -104,7 +194,7 @@ function CaptureInner() {
       executeSave(titleParam, textParam, urlParam);
     }, 0);
     return () => clearTimeout(timer);
-  }, [user, titleParam, textParam, urlParam, executeSave]);
+  }, [user, titleParam, textParam, urlParam, audioSharedParam, modeParam, executeSave]);
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,27 +230,57 @@ function CaptureInner() {
     );
   }
 
-  // Successfully saved view
+  // Processing incoming shared audio file from Pixel Recorder
+  if (processingSharedAudio) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 text-center p-6 max-w-md mx-auto">
+        <div className="relative flex items-center justify-center w-16 h-16">
+          <span className="loading loading-spinner loading-lg text-primary"></span>
+        </div>
+        <div>
+          <h3 className="font-bold text-lg">Ingesting Pixel Audio...</h3>
+          <p className="text-xs text-base-content/70 mt-1">
+            {sharedAudioStatus || "Transcribing & synthesizing with Gemini..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Active Saving State
+  if (saving) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3 text-center p-4">
+        <span className="loading loading-spinner loading-lg text-primary"></span>
+        <h3 className="font-bold text-lg">Saving to Second Brain...</h3>
+        <p className="text-xs text-base-content/60 font-mono">
+          Writing note into users/{user.uid.slice(0, 8)}.../notes
+        </p>
+      </div>
+    );
+  }
+
+  // Successfully saved view (Immediate link save + 1-tap voice append design)
   if (savedNote) {
     return (
       <div className="max-w-md mx-auto w-full p-4 animate-in fade-in zoom-in-95 duration-200">
-        <div className="card bg-base-200/60 backdrop-blur border border-success/30 shadow-2xl overflow-hidden">
-          <div className="card-body p-6 sm:p-8 text-center space-y-4">
-            <div className="w-16 h-16 rounded-2xl bg-success/15 text-success flex items-center justify-center text-3xl mx-auto ring-1 ring-success/30 shadow-lg shadow-success/10">
+        <div className="card bg-base-200/70 backdrop-blur border border-success/30 shadow-2xl overflow-hidden">
+          <div className="card-body p-6 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-success/15 text-success flex items-center justify-center text-2xl mx-auto ring-1 ring-success/30 shadow-lg shadow-success/10">
               ✓
             </div>
 
             <div>
-              <h2 className="text-2xl font-bold tracking-tight text-base-content">
+              <h2 className="text-xl font-bold tracking-tight text-base-content">
                 Saved to Second Brain!
               </h2>
-              <p className="text-xs text-base-content/60 mt-1">
-                Captured and stored in your Firestore subcollection.
+              <p className="text-xs text-base-content/60 mt-0.5">
+                Stored in users/{user.uid.slice(0, 8)}.../notes
               </p>
             </div>
 
             {/* Note Preview Card */}
-            <div className="text-left bg-base-100/80 border border-base-300 rounded-xl p-4 space-y-2">
+            <div className="text-left bg-base-100/90 border border-base-300 rounded-xl p-3.5 space-y-2">
               <div className="flex items-center gap-1.5">
                 {savedNote.audioUrl && (
                   <span className="badge badge-secondary badge-xs font-medium">
@@ -192,16 +312,49 @@ function CaptureInner() {
                   </span>
                 ))}
               </div>
-              <div className="text-[10px] text-base-content/40 font-mono pt-1 border-t border-base-300/60">
-                Path: users/{user.uid.slice(0, 8)}.../notes/{savedNote.id}
-              </div>
             </div>
 
+            {/* 1-Tap Giant Voice Thought Append Area */}
+            {!savedNote.audioUrl && (
+              <div className="p-3 bg-primary/10 border border-primary/25 rounded-2xl space-y-2">
+                <div className="text-xs font-semibold text-primary">
+                  Want to add your spoken thoughts to this?
+                </div>
+
+                {!isAppendingVoice ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsAppendingVoice(true)}
+                    className="btn btn-primary btn-block rounded-xl font-bold gap-2 shadow-lg shadow-primary/20 active:scale-95 transition-all text-sm"
+                  >
+                    <span className="text-lg">🎙️</span>
+                    Add Spoken Thought to this Note
+                  </button>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-2 bg-base-100/80 rounded-xl">
+                    <VoiceRecorder
+                      autoStart={true}
+                      targetNoteId={savedNote.id}
+                      sharedContext={{
+                        title: savedNote.title,
+                        url: urlParam || undefined,
+                        text: savedNote.plain_text,
+                      }}
+                      onNoteCreated={(updatedNote) => {
+                        setSavedNote(updatedNote);
+                        setIsAppendingVoice(false);
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Navigation Actions */}
-            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <Link
                 href="/dashboard"
-                className="btn btn-primary btn-sm flex-1 font-semibold shadow-md"
+                className="btn btn-neutral btn-sm flex-1 font-semibold"
               >
                 Go to Dashboard
               </Link>
@@ -211,6 +364,7 @@ function CaptureInner() {
                   setSavedNote(null);
                   setManualTitle("");
                   setManualText("");
+                  setIsAppendingVoice(false);
                   hasAutoSavedRef.current = false;
                 }}
                 className="btn btn-outline btn-sm flex-1"
@@ -224,15 +378,39 @@ function CaptureInner() {
     );
   }
 
-  // Active Saving State
-  if (saving) {
+  // Instant Voice Capture Mode (Triggered by App Shortcut or Pixel Quick Tap)
+  if (modeParam === "voice") {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3 text-center p-4">
-        <span className="loading loading-spinner loading-lg text-primary"></span>
-        <h3 className="font-bold text-lg">Saving to Second Brain...</h3>
-        <p className="text-xs text-base-content/60 font-mono">
-          Writing note into users/{user.uid.slice(0, 8)}.../notes
-        </p>
+      <div className="max-w-md mx-auto w-full p-4">
+        <div className="card bg-base-200/60 backdrop-blur border border-primary/30 shadow-2xl">
+          <div className="card-body p-6 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-primary/15 text-primary flex items-center justify-center text-3xl mx-auto ring-1 ring-primary/30 shadow-lg shadow-primary/10">
+              🎙️
+            </div>
+
+            <div>
+              <h2 className="text-xl font-bold tracking-tight">Instant Voice Capture</h2>
+              <p className="text-xs text-base-content/60 mt-1">
+                Speak your mind. Gemini will transcribe, summarize, and tag automatically.
+              </p>
+            </div>
+
+            <div className="flex flex-col items-center justify-center p-4 bg-base-100/80 rounded-2xl border border-base-300">
+              <VoiceRecorder
+                autoStart={autostartParam}
+                onNoteCreated={(note) => {
+                  setSavedNote(note);
+                }}
+              />
+            </div>
+
+            <div className="pt-2">
+              <Link href="/dashboard" className="text-xs text-base-content/60 hover:text-primary transition-colors">
+                ← Return to Dashboard
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -332,11 +510,10 @@ export default function CapturePage() {
         </main>
         <footer className="footer footer-center p-4 text-xs text-base-content/40 border-t border-base-300">
           <aside>
-            <p>Second Brain PWA • Web Share Target API • Universal Frictionless Capture</p>
+            <p>Second Brain PWA • Web Share Target API • Universal Frictionless Voice & Link Capture</p>
           </aside>
         </footer>
       </div>
     </AuthProvider>
   );
 }
-
