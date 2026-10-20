@@ -25,6 +25,9 @@ Establish the end-to-end foundation of `gBrain`—a private, zero-cost Second Br
 ### Phase 3: PWA & Frictionless Capture
 * Installable PWA configured via [`public/manifest.json`](file:///Users/gustavo/dev/projects/gBrain/public/manifest.json) with app shortcuts (`Instant Voice Note`, `Quick Text Capture`) and Web Share Target (`POST /capture-share-target`, `multipart/form-data`).
 * Service Worker ([`public/sw.js`](file:///Users/gustavo/dev/projects/gBrain/public/sw.js)) + server fallback ([`src/app/capture-share-target/route.ts`](file:///Users/gustavo/dev/projects/gBrain/src/app/capture-share-target/route.ts)) + [`src/app/capture/page.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/app/capture/page.tsx) supporting:
+  * Edge-to-edge full-height (`min-h-dvh`) dark layout (`bg-slate-950 text-slate-100`) tailored for Android Chrome/PWA share target sessions.
+  * Thumb-zone voice recording state with `text-5xl font-mono` timer, pulsing badge, animated Web Audio waveform canvas, and 56px `Done & Save` button.
+  * Polished confirmation state with AI title, summary, tag pills, and anchored bottom navigation.
   * Immediate auto-save of shared links and text snippets.
   * 1-tap **"Add Spoken Thought to this Note"** post-capture voice append flow.
   * Shared audio file ingestion (e.g., from Pixel Recorder) via IndexedDB (`shared_media`).

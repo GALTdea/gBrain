@@ -27,6 +27,9 @@ This document catalogs the currently implemented features in `gBrain`, where the
 
 ### Frictionless Capture & PWA (`manifest.json`, `sw.js`, `/capture`)
 * **Installable Standalone PWA:** Configured in [`public/manifest.json`](file:///Users/gustavo/dev/projects/gBrain/public/manifest.json) with light "Nord Snow" palette (`#ECEFF4` / `#5E81AC`), maskable icons, and app shortcuts.
+* **Edge-to-Edge Mobile Layout:** Full-height `min-h-dvh` layout in a dark palette (`bg-slate-950 text-slate-100`) tailored for Android Chrome/PWA share target sessions with thumb-zone touch targets.
+* **Thumb-Zone Voice Recording State:** Displays a large `text-5xl font-mono` live timer, an active pulsing recording badge, a full-width real-time Web Audio API waveform canvas, a massive high-contrast 56px `Done & Save` button anchored at the bottom, and a subtle `Cancel` option.
+* **Polished Confirmation Cards:** Success banner with AI-generated title, extracted summary, tag pills in styled `bg-slate-900/80 border border-slate-800` cards, and anchored navigation buttons (`Return to Dashboard`, `Capture Another`).
 * **Dual-Layer Web Share Target (`POST /capture-share-target`):**
   * **Primary Layer (Service Worker):** [`public/sw.js`](file:///Users/gustavo/dev/projects/gBrain/public/sw.js) intercepts `multipart/form-data` `POST` requests, stores shared text/URLs and binary audio files into IndexedDB (`gbrain_offline_store.shared_media`), and redirects (`303`) to `/capture`.
   * **Fallback Layer (Next.js Route):** [`src/app/capture-share-target/route.ts`](file:///Users/gustavo/dev/projects/gBrain/src/app/capture-share-target/route.ts) handles `POST`/`GET` requests if the Service Worker is inactive or warming up.

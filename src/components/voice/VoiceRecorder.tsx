@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { storage, isFirebaseConfigured } from "@/lib/firebase/client";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -16,6 +17,7 @@ import {
 interface VoiceRecorderProps {
   onNoteCreated?: (note: Note) => void;
   compact?: boolean;
+  fullScreen?: boolean;
   autoStart?: boolean; // Instantly start recording when loaded (e.g. from shortcut)
   targetNoteId?: string; // Append voice thought to this existing note
   sharedContext?: {
@@ -54,11 +56,13 @@ function getSupportedMimeType(): { mimeType: string; extension: string } {
 export default function VoiceRecorder({
   onNoteCreated,
   compact = false,
+  fullScreen,
   autoStart = false,
   targetNoteId,
   sharedContext,
   className = "",
 }: VoiceRecorderProps) {
+  const isFullScreen = fullScreen ?? !compact;
   const { user } = useAuth();
 
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -77,6 +81,7 @@ export default function VoiceRecorder({
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const currentDraftIdRef = useRef<string | null>(null);
+  const waveformCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Request screen wake lock so recording is not terminated if screen dims
   const requestWakeLock = async () => {
@@ -159,10 +164,78 @@ export default function VoiceRecorder({
           audioContextRef.current = audioCtx;
           const sourceNode = audioCtx.createMediaStreamSource(stream);
           const analyserNode = audioCtx.createAnalyser();
-          analyserNode.fftSize = 64;
+          analyserNode.fftSize = 128;
           sourceNode.connect(analyserNode);
 
           const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+
+          const drawWaveform = () => {
+            const canvas = waveformCanvasRef.current;
+            if (!canvas) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            const width = canvas.clientWidth;
+            const height = canvas.clientHeight;
+            if (width === 0 || height === 0) return;
+
+            if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+              canvas.width = Math.floor(width * dpr);
+              canvas.height = Math.floor(height * dpr);
+            }
+
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+
+            ctx.save();
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, width, height);
+
+            // Responsive number of bars across the screen width
+            const numBars = Math.min(48, Math.max(28, Math.floor(width / 7.5)));
+            const barWidth = 4;
+            const totalBarWidth = numBars * barWidth;
+            const gap = Math.max(2, (width - totalBarWidth) / (numBars - 1));
+            const centerY = height / 2;
+
+            for (let i = 0; i < numBars; i++) {
+              // Symmetrical wave mirroring from center outwards
+              const normDist = Math.abs(i - (numBars - 1) / 2) / ((numBars - 1) / 2);
+              const binIdx = Math.min(
+                dataArray.length - 1,
+                Math.floor((1 - normDist * 0.7) * (dataArray.length * 0.65))
+              );
+              const byteVal = dataArray[binIdx] || 0;
+              const factor = byteVal / 255;
+
+              // Baseline idle height + dynamic audio amplitude
+              const minHeight = 6;
+              const maxHeight = height * 0.85;
+              const barHeight = Math.max(minHeight, factor * maxHeight);
+
+              const x = i * (barWidth + gap);
+              const y = centerY - barHeight / 2;
+
+              // Glowing vibrant gradient
+              const grad = ctx.createLinearGradient(0, y, 0, y + barHeight);
+              grad.addColorStop(0, "rgba(244, 63, 94, 0.75)"); // rose-500
+              grad.addColorStop(0.5, "rgba(251, 113, 133, 1)"); // rose-400
+              grad.addColorStop(1, "rgba(244, 63, 94, 0.75)");
+
+              ctx.fillStyle = grad;
+              const radius = barWidth / 2;
+
+              ctx.beginPath();
+              if (typeof ctx.roundRect === "function") {
+                ctx.roundRect(x, y, barWidth, barHeight, radius);
+              } else {
+                ctx.rect(x, y, barWidth, barHeight);
+              }
+              ctx.fill();
+            }
+
+            ctx.restore();
+          };
+
           const updateAudioLevel = () => {
             if (!isRecordingRef.current) return;
             analyserNode.getByteFrequencyData(dataArray);
@@ -172,6 +245,7 @@ export default function VoiceRecorder({
             }
             const average = sum / dataArray.length;
             setAudioLevel(Math.min(100, Math.round((average / 128) * 100)));
+            drawWaveform();
             animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
           };
           updateAudioLevel();
@@ -440,6 +514,25 @@ export default function VoiceRecorder({
 
   // 1. Processing state
   if (isProcessing) {
+    if (isFullScreen) {
+      return (
+        <div
+          className={`flex flex-col items-center justify-center flex-1 h-full min-h-[70vh] gap-6 text-center max-w-md mx-auto w-full my-auto px-4 ${className}`}
+        >
+          <div className="relative flex items-center justify-center w-20 h-20">
+            <div className="absolute inset-0 rounded-full border-4 border-rose-500/20 animate-ping"></div>
+            <span className="loading loading-spinner loading-lg text-rose-500"></span>
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl font-bold text-slate-100">Synthesizing Note...</h3>
+            <p className="text-sm text-slate-400 max-w-xs mx-auto animate-pulse">
+              {statusMessage || "Gemini 1.5 Flash is transcribing and organizing your thoughts..."}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className={`flex items-center gap-3 bg-white border border-[#D8DEE9] px-4 py-2.5 rounded-2xl shadow-sm ${className}`}
@@ -454,6 +547,67 @@ export default function VoiceRecorder({
 
   // 2. Active recording state (Pulsing waveform, live timer, stop & cancel)
   if (isRecording) {
+    if (isFullScreen) {
+      return (
+        <div
+          className={`flex flex-col justify-between flex-1 h-full min-h-[75vh] w-full max-w-lg mx-auto py-2 ${className}`}
+        >
+          {/* Upper-Middle Area: Active Pulsing Recording Badge & 5xl Timer */}
+          <div className="flex flex-col items-center justify-center pt-8 sm:pt-12 space-y-4">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-semibold uppercase tracking-widest shadow-sm">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+              </span>
+              <span>Recording</span>
+            </div>
+
+            <div className="text-5xl font-mono font-bold tracking-tight text-white drop-shadow-sm select-none">
+              {formatTimer(recordSeconds)}
+            </div>
+
+            <p className="text-xs text-slate-400 font-medium">
+              Listening to your thoughts...
+            </p>
+          </div>
+
+          {/* Middle Area: Full-width animated audio waveform */}
+          <div className="w-full flex-1 flex flex-col items-center justify-center py-6 px-2">
+            <canvas
+              ref={waveformCanvasRef}
+              className="w-full h-28 sm:h-36 max-w-md mx-auto block"
+            />
+          </div>
+
+          {/* Bottom Area (Thumb Zone): Massive Done & Save and Cancel buttons */}
+          <div className="w-full space-y-3 mt-auto pt-4 pb-2">
+            <button
+              type="button"
+              onClick={stopAndProcessRecording}
+              className="w-full min-h-[56px] h-14 rounded-2xl bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-950 font-bold text-lg shadow-xl shadow-black/50 flex items-center justify-center gap-2.5 transition-all"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-5 h-5 fill-current text-rose-600"
+                viewBox="0 0 24 24"
+              >
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              <span>Done & Save</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={cancelRecording}
+              className="w-full py-2.5 text-center text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors active:scale-[0.98]"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className={`flex items-center justify-between gap-3 bg-rose-50 border border-rose-200 px-4 py-2.5 rounded-2xl shadow-sm backdrop-blur w-full max-w-md ${className}`}
@@ -520,6 +674,89 @@ export default function VoiceRecorder({
   }
 
   // 3. Idle state (Microphone button ready to record)
+  if (isFullScreen) {
+    return (
+      <div
+        className={`flex flex-col justify-between flex-1 h-full min-h-[75vh] w-full max-w-lg mx-auto py-2 ${className}`}
+      >
+        {errorMessage && (
+          <div className="mb-4 p-3 text-xs bg-rose-950/50 border border-rose-800 text-rose-300 rounded-xl flex items-center justify-between">
+            <span>{errorMessage}</span>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="ml-2 font-bold hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {statusMessage && (
+          <div className="mb-4 p-3 text-xs bg-emerald-950/50 border border-emerald-800 text-emerald-300 rounded-xl">
+            {statusMessage}
+          </div>
+        )}
+
+        {/* Upper Area */}
+        <div className="flex flex-col items-center justify-center pt-8 sm:pt-12 text-center space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 text-rose-400 flex items-center justify-center text-2xl shadow-inner">
+            🎙️
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-2xl font-bold tracking-tight text-slate-100">
+              Instant Voice Capture
+            </h2>
+            <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+              Speak your mind. Gemini will transcribe, summarize, and tag automatically.
+            </p>
+          </div>
+        </div>
+
+        {/* Middle Area: Big Pulsing Central Mic Button */}
+        <div className="w-full flex-1 flex flex-col items-center justify-center py-6">
+          <button
+            type="button"
+            onClick={startRecording}
+            className="relative group p-6 rounded-full bg-rose-500/10 border-2 border-rose-500/30 hover:border-rose-500/60 active:scale-95 transition-all shadow-2xl flex items-center justify-center"
+            title="Tap to Start Recording"
+            aria-label="Tap to Start Recording"
+          >
+            <span className="absolute inset-0 rounded-full bg-rose-500/10 animate-ping opacity-50"></span>
+            <div className="w-20 h-20 rounded-full bg-rose-600 group-hover:bg-rose-500 text-white flex items-center justify-center shadow-lg transition-colors">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-10 h-10"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                />
+              </svg>
+            </div>
+          </button>
+          <span className="text-xs text-slate-400 mt-4 font-medium">
+            Tap microphone to start recording
+          </span>
+        </div>
+
+        {/* Bottom Area */}
+        <div className="w-full space-y-3 mt-auto pt-4 pb-2">
+          <Link
+            href="/dashboard"
+            className="w-full py-3 block text-center text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            ← Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`relative inline-flex flex-col items-start ${className}`}>
       {errorMessage && (
@@ -567,12 +804,12 @@ export default function VoiceRecorder({
         <button
           type="button"
           onClick={startRecording}
-          className="btn btn-sm btn-outline border-[#D8DEE9] text-[#2E3440] hover:border-[#5E81AC] hover:bg-blue-50/50 hover:text-[#5E81AC] rounded-xl gap-2 font-medium transition-all shadow-sm active:scale-95"
+          className="btn btn-sm btn-outline border-slate-700 text-slate-200 hover:border-rose-500 hover:bg-rose-500/10 hover:text-rose-400 rounded-xl gap-2 font-medium transition-all shadow-sm active:scale-95"
           title="Record Voice Memo with Gemini AI"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className="w-4 h-4 text-[#5E81AC]"
+            className="w-4 h-4 text-rose-400"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
