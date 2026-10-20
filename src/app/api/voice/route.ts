@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
       audioBase64,
       mimeType = "audio/webm",
       browserTranscript,
+      clientTimeZone,
       noteId: customNoteId,
       targetNoteId,
       sharedContext,
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
       audioBase64,
       mimeType,
       browserTranscript,
+      clientTimeZone,
       sharedContext,
     });
 

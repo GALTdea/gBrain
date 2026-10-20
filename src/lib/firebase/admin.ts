@@ -422,6 +422,7 @@ export interface ProcessVoiceMemoParams {
   audioBase64?: string;
   mimeType: string;
   browserTranscript?: string;
+  clientTimeZone?: string;
   sharedContext?: {
     title?: string;
     text?: string;
@@ -430,13 +431,59 @@ export interface ProcessVoiceMemoParams {
 }
 
 /**
- * Multimodal audio processing using Gemini 1.5 Flash via Vertex AI,
- * with live browser SpeechRecognition transcript fallback when billing/ADC is not active.
+ * Normalizes browser MediaRecorder MIME types (e.g., "audio/webm;codecs=opus" -> "audio/webm")
+ * so Vertex AI / Gemini multimodal endpoints don't reject codec parameters.
+ */
+function normalizeAudioMimeType(rawMime?: string): string {
+  if (!rawMime) return "audio/webm";
+  const base = rawMime.split(";")[0].trim().toLowerCase();
+  if (base === "audio/mp4" || base === "audio/x-m4a" || base === "audio/m4a") {
+    return "audio/mp4";
+  }
+  if (base === "audio/mpeg" || base === "audio/mp3") {
+    return "audio/mp3";
+  }
+  if (base === "audio/wav" || base === "audio/x-wav" || base === "audio/wave") {
+    return "audio/wav";
+  }
+  if (base === "audio/ogg" || base === "application/ogg") {
+    return "audio/ogg";
+  }
+  if (base === "audio/aac") {
+    return "audio/aac";
+  }
+  return "audio/webm";
+}
+
+/**
+ * Strips any "data:audio/...;codecs=...;base64," prefix safely.
+ */
+function extractCleanBase64(dataUrlOrBase64: string): string {
+  const commaIdx = dataUrlOrBase64.indexOf(",");
+  if (commaIdx !== -1 && dataUrlOrBase64.slice(0, commaIdx).includes("base64")) {
+    return dataUrlOrBase64.slice(commaIdx + 1).trim();
+  }
+  return dataUrlOrBase64.replace(/^data:[^,]+,/, "").trim();
+}
+
+/**
+ * Multimodal audio processing using Gemini via Vertex AI / GenAI SDK,
+ * with clean base64 extraction and timezone-accurate fallback.
  */
 export async function processMultimodalVoiceMemo(
   params: ProcessVoiceMemoParams
 ): Promise<VoiceMemoAnalysis> {
-  const { audioStorageUri, audioBase64, mimeType, browserTranscript, sharedContext } = params;
+  const {
+    audioStorageUri,
+    audioBase64,
+    mimeType,
+    browserTranscript,
+    clientTimeZone = "America/Los_Angeles",
+    sharedContext,
+  } = params;
+
+  const cleanMimeType = normalizeAudioMimeType(mimeType);
+  const cleanBase64 = audioBase64 ? extractCleanBase64(audioBase64) : undefined;
 
   let contextDescription = "";
   if (sharedContext?.url || sharedContext?.title || sharedContext?.text) {
@@ -466,74 +513,119 @@ You must return valid JSON with exactly these keys:
   "tags": ["voice-memo", "tag1"]
 }`;
 
+  const parseJsonAnalysis = (rawText: string): VoiceMemoAnalysis | null => {
+    try {
+      let jsonStr = rawText.trim();
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.replace(/^```json/, "").replace(/```$/, "").trim();
+      } else if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.replace(/^```/, "").replace(/```$/, "").trim();
+      }
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && (parsed.transcript || parsed.summary)) {
+        return {
+          title: parsed.title || "Voice Memo",
+          summary: parsed.summary || "Voice recording summary",
+          transcript: parsed.transcript || browserTranscript || "No transcript generated.",
+          tags: Array.isArray(parsed.tags) ? parsed.tags : ["voice-memo"],
+        };
+      }
+    } catch (parseErr) {
+      console.warn("[Multimodal Voice] Failed to parse JSON response:", parseErr);
+    }
+    return null;
+  };
+
+  // Strategy 1: GoogleGenAI SDK (prefer inlineData when cleanBase64 is present so GCS IAM never blocks)
   try {
     const client = getGenAIClient();
     const parts: Array<Record<string, unknown>> = [];
 
-    if (audioStorageUri) {
+    if (cleanBase64) {
+      parts.push({
+        inlineData: {
+          mimeType: cleanMimeType,
+          data: cleanBase64,
+        },
+      });
+    } else if (audioStorageUri) {
       parts.push({
         fileData: {
           fileUri: audioStorageUri,
-          mimeType: mimeType || "audio/webm",
-        },
-      });
-    } else if (audioBase64) {
-      const cleanBase64 = audioBase64.replace(/^data:audio\/[^;]+;base64,/, "");
-      parts.push({
-        inlineData: {
-          mimeType: mimeType || "audio/webm",
-          data: cleanBase64,
+          mimeType: cleanMimeType,
         },
       });
     }
 
     parts.push({ text: promptText });
 
-    let voiceResult: { text?: string } | null = null;
     for (const model of CANDIDATE_GEMINI_MODELS) {
       try {
         const result = await client.models.generateContent({
           model,
-          contents: parts,
+          contents: [{ role: "user", parts }],
           config: {
             responseMimeType: "application/json",
             temperature: 0.2,
           },
         });
         if (result.text) {
-          voiceResult = result;
-          break;
+          const parsed = parseJsonAnalysis(result.text);
+          if (parsed) return parsed;
         }
       } catch (voiceModelErr) {
-        console.warn(`[Multimodal Voice] Model ${model} failed, trying next candidate:`, voiceModelErr);
+        console.warn(`[Multimodal Voice GenAI] Model ${model} failed, trying next:`, voiceModelErr);
       }
-    }
-
-    if (voiceResult?.text) {
-      let jsonStr = voiceResult.text.trim();
-      if (jsonStr.startsWith("```json")) {
-        jsonStr = jsonStr.replace(/^```json/, "").replace(/```$/, "").trim();
-      } else if (jsonStr.startsWith("```")) {
-        jsonStr = jsonStr.replace(/^```/, "").replace(/```$/, "").trim();
-      }
-
-      const parsed = JSON.parse(jsonStr);
-      return {
-        title: parsed.title || "Voice Memo",
-        summary: parsed.summary || "Voice recording summary",
-        transcript: parsed.transcript || browserTranscript || "No transcript generated.",
-        tags: Array.isArray(parsed.tags) ? parsed.tags : ["voice-memo"],
-      };
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.warn(
-      "[Multimodal Voice] Gemini voice memo call deferred or offline:",
-      message
-    );
+    console.warn("[Multimodal Voice] GenAI client error:", err);
   }
 
-  // If browser SpeechRecognition captured the spoken words, synthesize title, summary, and transcript directly!
+  // Strategy 2: Official @google-cloud/vertexai SDK fallback (guaranteed ADC compatibility on Cloud Run)
+  if (cleanBase64) {
+    try {
+      const vertex = getVertexAI();
+      for (const modelName of ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-001"]) {
+        try {
+          const generativeModel = vertex.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.2,
+            },
+          });
+          const resp = await generativeModel.generateContent({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: cleanMimeType,
+                      data: cleanBase64,
+                    },
+                  },
+                  { text: promptText },
+                ],
+              },
+            ],
+          });
+          const candidateText =
+            resp.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (candidateText) {
+            const parsed = parseJsonAnalysis(candidateText);
+            if (parsed) return parsed;
+          }
+        } catch (vertexModelErr) {
+          console.warn(`[Multimodal Voice VertexAI] Model ${modelName} failed:`, vertexModelErr);
+        }
+      }
+    } catch (vertexErr) {
+      console.warn("[Multimodal Voice] VertexAI fallback error:", vertexErr);
+    }
+  }
+
+  // Strategy 3: If browser SpeechRecognition captured the spoken words, synthesize directly
   const cleanTranscript = (browserTranscript || "").trim();
   if (cleanTranscript) {
     const words = cleanTranscript.split(/\s+/);
@@ -556,13 +648,27 @@ You must return valid JSON with exactly these keys:
     };
   }
 
-  // Graceful fallback if neither Vertex AI nor browser SpeechRecognition produced text
-  const dateStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // Graceful fallback with accurate user timezone (defaulting to America/Los_Angeles instead of server UTC)
+  let dateStr: string;
+  try {
+    dateStr = new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: clientTimeZone || "America/Los_Angeles",
+    });
+  } catch {
+    dateStr = new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "America/Los_Angeles",
+    });
+  }
+
   return {
     title: `Voice Memo (${dateStr})`,
     summary: "Voice recording captured via Second Brain VoiceRecorder.",
     transcript:
-      "No speech detected during recording (or Vertex AI billing is disabled and browser speech recognition was unavailable).",
+      "No speech detected during recording (or Vertex AI multimodal analysis was unreachable).",
     tags: ["voice-memo", "audio"],
   };
 }

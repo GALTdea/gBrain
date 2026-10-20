@@ -139,6 +139,8 @@ function CaptureInner() {
         }
 
         setSharedAudioStatus("Synthesizing transcript and notes with Gemini 1.5 Flash...");
+        const clientTimeZone =
+          Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
         const response = await fetch("/api/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -146,6 +148,7 @@ function CaptureInner() {
             userId: user.uid,
             audioBase64: base64Data,
             mimeType: shared.audioType || "audio/m4a",
+            clientTimeZone,
             sharedContext: {
               title: shared.title,
               text: shared.text,
@@ -314,8 +317,8 @@ function CaptureInner() {
               </div>
             </div>
 
-            {/* 1-Tap Giant Voice Thought Append Area */}
-            {!savedNote.audioUrl && (
+            {/* 1-Tap Giant Voice Thought Append Area (Only shown for shared links/text, not voice memos) */}
+            {!savedNote.audioUrl && !savedNote.tags?.includes("voice-memo") && modeParam !== "voice" && (
               <div className="p-3 bg-primary/10 border border-primary/25 rounded-2xl space-y-2">
                 <div className="text-xs font-semibold text-primary">
                   Want to add your spoken thoughts to this?

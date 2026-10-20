@@ -378,6 +378,8 @@ export default function VoiceRecorder({
 
         // Trigger /api/voice route for multimodal transcription and indexing
         setStatusMessage("Transcribing & synthesizing note with Gemini...");
+        const clientTimeZone =
+          Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
         const response = await fetch("/api/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -387,6 +389,7 @@ export default function VoiceRecorder({
             audioUrl: downloadUrl || undefined,
             audioBase64: base64Data,
             mimeType: effectiveMimeType,
+            clientTimeZone,
             targetNoteId,
             sharedContext,
           }),
