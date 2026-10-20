@@ -41,6 +41,21 @@ You are the lead autonomous DevOps engineer and Full-Stack developer. Your goal 
 *   Write a Cloud Function or Next.js background route that triggers on note updates. If `plain_text` changed, generate a 768-dimensional embedding via Vertex AI and update the document.
 *   Build a conversational search UI. Embed the search query, run Firestore `findNearest` on the user's subcollection, filter the results if necessary, and pass them to Gemini 1.5 Flash to synthesize a conversational answer with citations.
 
+## Documentation & Staged Development Workflow
+
+All persistent product context, system architecture, and stage plans are stored in `docs/`:
+*   **Product Context:** `docs/product/overview.md` and `docs/product/features.md`
+*   **Architecture Reference:** `docs/architecture/system-design.md`, `docs/architecture/data-and-security.md`, and `docs/architecture/ai-and-capture-pipelines.md`
+*   **Implementation Stages:** `docs/stages/` (see `docs/stages/00-completed-foundation.md` and `docs/stages/TEMPLATE.md`)
+
+When planning or implementing any new feature or stage, follow this repeatable workflow:
+1.  **Read Context:** Read `AGENTS.md`, the relevant `docs/` files, and existing application code.
+2.  **Inspect & Compare:** Inspect the current repository state and compare the requested change or stage plan against the actual codebase.
+3.  **Propose Brief / Plan:** Before writing code on non-trivial features, propose an implementation approach including files to change, verification steps, risks, and open decisions.
+4.  **Implement:** Write clean TypeScript/React code adhering strictly to the Core Architectural Rules.
+5.  **Verify:** Run relevant checks (`npm run lint`, `npm run build`, and browser verification when applicable).
+6.  **Update Documentation:** Update the relevant files in `docs/` (`product/`, `architecture/`, `stages/`) so repository documentation always reflects the as-built state.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
