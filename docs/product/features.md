@@ -26,7 +26,7 @@ This document catalogs the currently implemented features in `gBrain`, where the
 * **Tag Management:** Inline tag addition (`Enter`) and removal with automatic `#` normalization.
 
 ### Frictionless Capture & PWA (`manifest.json`, `sw.js`, `/capture`)
-* **Installable Standalone PWA:** Configured in [`public/manifest.json`](file:///Users/gustavo/dev/projects/gBrain/public/manifest.json) with dark theme styling, maskable icons, and app shortcuts.
+* **Installable Standalone PWA:** Configured in [`public/manifest.json`](file:///Users/gustavo/dev/projects/gBrain/public/manifest.json) with light "Nord Snow" palette (`#ECEFF4` / `#5E81AC`), maskable icons, and app shortcuts.
 * **Dual-Layer Web Share Target (`POST /capture-share-target`):**
   * **Primary Layer (Service Worker):** [`public/sw.js`](file:///Users/gustavo/dev/projects/gBrain/public/sw.js) intercepts `multipart/form-data` `POST` requests, stores shared text/URLs and binary audio files into IndexedDB (`gbrain_offline_store.shared_media`), and redirects (`303`) to `/capture`.
   * **Fallback Layer (Next.js Route):** [`src/app/capture-share-target/route.ts`](file:///Users/gustavo/dev/projects/gBrain/src/app/capture-share-target/route.ts) handles `POST`/`GET` requests if the Service Worker is inactive or warming up.

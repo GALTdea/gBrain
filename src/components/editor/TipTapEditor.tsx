@@ -201,9 +201,9 @@ export default function TipTapEditor({
   }
 
   return (
-    <div className="card bg-base-200/50 backdrop-blur border border-base-300 shadow-2xl overflow-hidden transition-all">
+    <div className="bg-white rounded-2xl border border-[#D8DEE9] shadow-md overflow-hidden transition-all">
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-base-300/60 bg-base-200/40">
+      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[#D8DEE9] bg-[#F8FAFC]">
         <button
           type="button"
           onClick={() => {
@@ -213,7 +213,7 @@ export default function TipTapEditor({
             }
             onClose();
           }}
-          className="btn btn-ghost btn-sm gap-1.5 text-base-content/70 hover:text-base-content -ml-2"
+          className="btn btn-ghost btn-sm gap-1.5 text-[#4C566A] hover:text-[#2E3440] hover:bg-[#E5E9F0] -ml-2 rounded-lg"
           title="Back to notes"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -225,24 +225,24 @@ export default function TipTapEditor({
         {/* Subtle Saving Indicator */}
         <div className="flex items-center gap-2">
           {saveStatus === "saving" && (
-            <div className="flex items-center gap-1.5 text-primary/80 animate-pulse">
-              <span className="loading loading-spinner loading-xs"></span>
+            <div className="flex items-center gap-1.5 text-[#5E81AC] animate-pulse">
+              <span className="loading loading-spinner loading-xs text-[#5E81AC]"></span>
               <span className="text-[11px] font-mono">Saving...</span>
             </div>
           )}
           {saveStatus === "saved" && (
             <div
-              className="flex items-center gap-1 text-success/80"
+              className="flex items-center gap-1 text-emerald-600"
               title={lastSaved ? `Last saved at ${lastSaved.toLocaleTimeString()}` : "Saved"}
             >
-              <svg className="w-3.5 h-3.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
-              <span className="text-[11px] font-mono text-base-content/50">Saved</span>
+              <span className="text-[11px] font-mono text-[#64748B]">Saved</span>
             </div>
           )}
           {saveStatus === "error" && (
-            <div className="flex items-center gap-1 text-error text-[11px]">
+            <div className="flex items-center gap-1 text-rose-600 text-[11px]">
               Failed to save
             </div>
           )}
@@ -256,23 +256,23 @@ export default function TipTapEditor({
           placeholder="Note Title (or auto-derive from content)..."
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
-          className="w-full bg-transparent text-2xl font-bold tracking-tight placeholder:text-base-content/30 focus:outline-none"
+          className="w-full bg-transparent text-2xl font-bold tracking-tight text-[#2E3440] placeholder:text-[#94A3B8] focus:outline-none"
         />
       </div>
 
       {/* Tags Input & Format toggle */}
-      <div className="px-6 pb-3 flex flex-wrap items-center justify-between gap-2 border-b border-base-300/40">
+      <div className="px-6 pb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#D8DEE9]">
         <div className="flex flex-wrap items-center gap-1.5">
           {tags.map((tag) => (
             <span
               key={tag}
-              className="badge badge-neutral badge-sm gap-1 py-2 px-2.5 text-xs font-mono"
+              className="bg-[#E5E9F0] text-[#2E3440] hover:bg-[#D8DEE9] rounded-md gap-1 py-1 px-2.5 text-xs font-mono inline-flex items-center"
             >
               #{tag}
               <button
                 type="button"
                 onClick={() => handleRemoveTag(tag)}
-                className="hover:text-error ml-0.5"
+                className="hover:text-rose-600 ml-0.5"
               >
                 ×
               </button>
@@ -284,7 +284,7 @@ export default function TipTapEditor({
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
             onKeyDown={handleAddTag}
-            className="input input-ghost input-xs max-w-[130px] text-xs focus:bg-base-300/40"
+            className="input input-ghost input-xs max-w-[130px] text-xs text-[#2E3440] placeholder:text-[#94A3B8] focus:bg-[#E5E9F0]"
           />
         </div>
 
@@ -293,7 +293,7 @@ export default function TipTapEditor({
           type="button"
           onClick={() => setShowToolbar((prev) => !prev)}
           className={`btn btn-ghost btn-xs rounded-lg gap-1 text-xs ${
-            showToolbar || hasSelection ? "text-primary bg-primary/10" : "text-base-content/40 hover:text-base-content"
+            showToolbar || hasSelection ? "text-[#5E81AC] bg-blue-50 ring-1 ring-[#5E81AC]/20" : "text-[#64748B] hover:text-[#2E3440] hover:bg-[#E5E9F0]"
           }`}
           title={showToolbar ? "Hide formatting" : "Show formatting"}
         >
@@ -304,11 +304,11 @@ export default function TipTapEditor({
 
       {/* TipTap Rich Text Toolbar (hidden unless text highlighted or formatting toggled) */}
       {(hasSelection || showToolbar) && (
-        <div className="flex flex-wrap items-center gap-1 px-5 py-2 bg-base-200/90 border-b border-base-300/60 shadow-inner backdrop-blur animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="flex flex-wrap items-center gap-1 px-5 py-2 bg-[#F8FAFC] border-b border-[#D8DEE9] shadow-inner animate-in fade-in slide-in-from-top-1 duration-150">
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("bold") ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("bold") ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Bold"
           >
             <strong>B</strong>
@@ -316,7 +316,7 @@ export default function TipTapEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("italic") ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("italic") ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Italic"
           >
             <em>I</em>
@@ -324,7 +324,7 @@ export default function TipTapEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleStrike().run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("strike") ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("strike") ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Strikethrough"
           >
             <s>S</s>
@@ -332,18 +332,18 @@ export default function TipTapEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleCode().run()}
-            className={`btn btn-xs rounded-lg font-mono ${editor.isActive("code") ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg font-mono ${editor.isActive("code") ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Inline Code"
           >
             &lt;/&gt;
           </button>
 
-          <div className="divider divider-horizontal my-1 mx-0.5"></div>
+          <div className="w-px h-4 bg-[#D8DEE9] mx-1"></div>
 
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("heading", { level: 1 }) ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("heading", { level: 1 }) ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Heading 1"
           >
             H1
@@ -351,7 +351,7 @@ export default function TipTapEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("heading", { level: 2 }) ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("heading", { level: 2 }) ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Heading 2"
           >
             H2
@@ -359,18 +359,18 @@ export default function TipTapEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("heading", { level: 3 }) ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("heading", { level: 3 }) ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Heading 3"
           >
             H3
           </button>
 
-          <div className="divider divider-horizontal my-1 mx-0.5"></div>
+          <div className="w-px h-4 bg-[#D8DEE9] mx-1"></div>
 
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleBulletList().run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("bulletList") ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("bulletList") ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Bullet List"
           >
             • List
@@ -378,7 +378,7 @@ export default function TipTapEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("orderedList") ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("orderedList") ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Numbered List"
           >
             1. List
@@ -386,7 +386,7 @@ export default function TipTapEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleBlockquote().run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("blockquote") ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("blockquote") ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Blockquote"
           >
             &ldquo; Quote
@@ -394,19 +394,19 @@ export default function TipTapEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-            className={`btn btn-xs rounded-lg ${editor.isActive("codeBlock") ? "btn-primary" : "btn-ghost"}`}
+            className={`btn btn-xs rounded-lg ${editor.isActive("codeBlock") ? "bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none" : "btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440]"}`}
             title="Code Block"
           >
             Code
           </button>
 
-          <div className="divider divider-horizontal my-1 mx-0.5"></div>
+          <div className="w-px h-4 bg-[#D8DEE9] mx-1"></div>
 
           <button
             type="button"
             onClick={() => editor.chain().focus().undo().run()}
             disabled={!editor.can().undo()}
-            className="btn btn-xs btn-ghost rounded-lg"
+            className="btn btn-xs btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440] rounded-lg"
             title="Undo"
           >
             ↩
@@ -415,7 +415,7 @@ export default function TipTapEditor({
             type="button"
             onClick={() => editor.chain().focus().redo().run()}
             disabled={!editor.can().redo()}
-            className="btn btn-xs btn-ghost rounded-lg"
+            className="btn btn-xs btn-ghost text-[#4C566A] hover:bg-[#E5E9F0] hover:text-[#2E3440] rounded-lg"
             title="Redo"
           >
             ↪
@@ -424,12 +424,12 @@ export default function TipTapEditor({
       )}
 
       {/* Editor Content Area */}
-      <div className="bg-base-100/40 p-4 min-h-[350px]">
+      <div className="bg-white p-4 min-h-[350px]">
         <EditorContent editor={editor} />
       </div>
 
       {/* Bottom Info Bar */}
-      <div className="flex items-center justify-between text-xs text-base-content/40 px-6 py-2.5 bg-base-200/40 border-t border-base-300/50 font-mono">
+      <div className="flex items-center justify-between text-xs text-[#64748B] px-6 py-2.5 bg-[#F8FAFC] border-t border-[#D8DEE9] font-mono">
         <div>
           {editor.getText().length} characters • {editor.getText().trim() ? editor.getText().trim().split(/\s+/).length : 0} words
         </div>

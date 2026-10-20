@@ -10,7 +10,6 @@ import {
   saveVoiceDraft,
   appendDraftChunk,
   deleteVoiceDraft,
-  getPendingVoiceDrafts,
   VoiceDraft,
 } from "@/lib/voice/voice-draft-store";
 
@@ -443,10 +442,10 @@ export default function VoiceRecorder({
   if (isProcessing) {
     return (
       <div
-        className={`flex items-center gap-3 bg-base-200/90 border border-primary/30 px-4 py-2.5 rounded-2xl shadow-md ${className}`}
+        className={`flex items-center gap-3 bg-white border border-[#D8DEE9] px-4 py-2.5 rounded-2xl shadow-sm ${className}`}
       >
-        <span className="loading loading-spinner loading-sm text-primary"></span>
-        <span className="text-xs font-medium text-base-content/80 animate-pulse">
+        <span className="loading loading-spinner loading-sm text-[#5E81AC]"></span>
+        <span className="text-xs font-medium text-[#2E3440] animate-pulse">
           {statusMessage || "Processing voice memo with Gemini..."}
         </span>
       </div>
@@ -457,32 +456,32 @@ export default function VoiceRecorder({
   if (isRecording) {
     return (
       <div
-        className={`flex items-center justify-between gap-3 bg-error/10 border border-error/40 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur w-full max-w-md ${className}`}
+        className={`flex items-center justify-between gap-3 bg-rose-50 border border-rose-200 px-4 py-2.5 rounded-2xl shadow-sm backdrop-blur w-full max-w-md ${className}`}
       >
         <div className="flex items-center gap-2.5">
           {/* Pulsing red recording dot */}
           <div className="relative flex items-center justify-center w-4 h-4 shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-error opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-error"></span>
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
           </div>
 
           {/* Live timer */}
-          <div className="font-mono text-xs font-bold text-error tracking-wider">
+          <div className="font-mono text-xs font-bold text-rose-700 tracking-wider">
             REC {formatTimer(recordSeconds)}
           </div>
 
           {/* Dynamic Audio Level Meter */}
           <div className="flex items-center gap-0.5 h-4 ml-1">
             <span
-              className="w-1 bg-error rounded-full transition-all duration-75"
+              className="w-1 bg-rose-500 rounded-full transition-all duration-75"
               style={{ height: `${Math.max(4, (audioLevel / 100) * 16)}px` }}
             />
             <span
-              className="w-1 bg-error rounded-full transition-all duration-75"
+              className="w-1 bg-rose-500 rounded-full transition-all duration-75"
               style={{ height: `${Math.max(4, ((audioLevel * 1.2) / 100) * 16)}px` }}
             />
             <span
-              className="w-1 bg-error rounded-full transition-all duration-75"
+              className="w-1 bg-rose-500 rounded-full transition-all duration-75"
               style={{ height: `${Math.max(4, ((audioLevel * 0.8) / 100) * 16)}px` }}
             />
           </div>
@@ -493,7 +492,7 @@ export default function VoiceRecorder({
           <button
             type="button"
             onClick={stopAndProcessRecording}
-            className="btn btn-error btn-sm rounded-xl gap-1.5 text-white font-semibold shadow-md active:scale-95 transition-all"
+            className="btn btn-sm bg-rose-600 hover:bg-rose-700 border-none rounded-xl gap-1.5 text-white font-semibold shadow-sm active:scale-95 transition-all"
             title="Stop recording and transcribe note"
           >
             <svg
@@ -510,7 +509,7 @@ export default function VoiceRecorder({
           <button
             type="button"
             onClick={cancelRecording}
-            className="btn btn-ghost btn-xs text-base-content/60 hover:text-base-content"
+            className="btn btn-ghost btn-xs text-[#64748B] hover:text-[#2E3440]"
             title="Discard voice recording"
           >
             Cancel
@@ -524,7 +523,7 @@ export default function VoiceRecorder({
   return (
     <div className={`relative inline-flex flex-col items-start ${className}`}>
       {errorMessage && (
-        <div className="absolute bottom-full mb-2 left-0 z-50 p-2 text-xs bg-error/15 border border-error/30 text-error rounded-xl max-w-xs shadow-md">
+        <div className="absolute bottom-full mb-2 left-0 z-50 p-2 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-xl max-w-xs shadow-md">
           {errorMessage}
           <button
             onClick={() => setErrorMessage(null)}
@@ -536,7 +535,7 @@ export default function VoiceRecorder({
       )}
 
       {statusMessage && (
-        <div className="absolute bottom-full mb-2 left-0 z-50 p-2 text-xs bg-success/15 border border-success/30 text-success rounded-xl max-w-xs shadow-md">
+        <div className="absolute bottom-full mb-2 left-0 z-50 p-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl max-w-xs shadow-md">
           {statusMessage}
         </div>
       )}
@@ -545,7 +544,7 @@ export default function VoiceRecorder({
         <button
           type="button"
           onClick={startRecording}
-          className="btn btn-circle btn-sm btn-ghost border border-base-300 hover:border-primary/50 text-base-content/80 hover:text-primary transition-colors"
+          className="btn btn-circle btn-sm btn-ghost border border-[#D8DEE9] hover:border-[#5E81AC] text-[#4C566A] hover:text-[#5E81AC] hover:bg-[#E5E9F0]/60 transition-colors"
           title="Record Voice Memo"
           aria-label="Record Voice Memo"
         >
@@ -568,12 +567,12 @@ export default function VoiceRecorder({
         <button
           type="button"
           onClick={startRecording}
-          className="btn btn-sm btn-outline border-base-300 hover:border-primary hover:bg-primary/10 hover:text-primary rounded-xl gap-2 font-medium transition-all shadow-sm active:scale-95"
+          className="btn btn-sm btn-outline border-[#D8DEE9] text-[#2E3440] hover:border-[#5E81AC] hover:bg-blue-50/50 hover:text-[#5E81AC] rounded-xl gap-2 font-medium transition-all shadow-sm active:scale-95"
           title="Record Voice Memo with Gemini AI"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className="w-4 h-4 text-primary"
+            className="w-4 h-4 text-[#5E81AC]"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

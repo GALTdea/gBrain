@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "Second Brain",
   },
 };
@@ -20,9 +20,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
+    <html lang="en" data-theme="nord" suppressHydrationWarning>
       <body
-        className="min-h-screen bg-base-100 text-base-content antialiased font-sans flex flex-col"
+        className="min-h-screen bg-[#ECEFF4] text-[#2E3440] antialiased font-sans flex flex-col selection:bg-[#88C0D0]/30 selection:text-[#2E3440]"
         suppressHydrationWarning
       >
         <ServiceWorkerRegister />

@@ -11,7 +11,6 @@ import VoiceRecorder from "@/components/voice/VoiceRecorder";
 import {
   getSharedMediaPayload,
   deleteSharedMediaPayload,
-  SharedMediaPayload,
 } from "@/lib/voice/voice-draft-store";
 
 function CaptureInner() {
@@ -207,8 +206,8 @@ function CaptureInner() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
-        <span className="loading loading-spinner loading-lg text-primary"></span>
-        <span className="text-xs text-base-content/60 font-mono tracking-wider">
+        <span className="loading loading-spinner loading-lg text-[#5E81AC]"></span>
+        <span className="text-xs text-[#64748B] font-mono tracking-wider">
           VERIFYING SESSION...
         </span>
       </div>
@@ -219,8 +218,8 @@ function CaptureInner() {
   if (!user) {
     return (
       <div className="max-w-md mx-auto w-full p-4 space-y-4">
-        <div className="alert alert-warning text-sm shadow-lg">
-          <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="alert bg-amber-50 border border-amber-200 text-amber-800 text-sm shadow-sm rounded-xl">
+          <svg className="w-5 h-5 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <div>
@@ -238,11 +237,11 @@ function CaptureInner() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 text-center p-6 max-w-md mx-auto">
         <div className="relative flex items-center justify-center w-16 h-16">
-          <span className="loading loading-spinner loading-lg text-primary"></span>
+          <span className="loading loading-spinner loading-lg text-[#5E81AC]"></span>
         </div>
         <div>
-          <h3 className="font-bold text-lg">Ingesting Pixel Audio...</h3>
-          <p className="text-xs text-base-content/70 mt-1">
+          <h3 className="font-bold text-lg text-[#2E3440]">Ingesting Pixel Audio...</h3>
+          <p className="text-xs text-[#64748B] mt-1">
             {sharedAudioStatus || "Transcribing & synthesizing with Gemini..."}
           </p>
         </div>
@@ -254,9 +253,9 @@ function CaptureInner() {
   if (saving) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3 text-center p-4">
-        <span className="loading loading-spinner loading-lg text-primary"></span>
-        <h3 className="font-bold text-lg">Saving to Second Brain...</h3>
-        <p className="text-xs text-base-content/60 font-mono">
+        <span className="loading loading-spinner loading-lg text-[#5E81AC]"></span>
+        <h3 className="font-bold text-lg text-[#2E3440]">Saving to Second Brain...</h3>
+        <p className="text-xs text-[#64748B] font-mono">
           Writing note into users/{user.uid.slice(0, 8)}.../notes
         </p>
       </div>
@@ -267,30 +266,30 @@ function CaptureInner() {
   if (savedNote) {
     return (
       <div className="max-w-md mx-auto w-full p-4 animate-in fade-in zoom-in-95 duration-200">
-        <div className="card bg-base-200/70 backdrop-blur border border-success/30 shadow-2xl overflow-hidden">
+        <div className="bg-white border border-[#D8DEE9] shadow-md rounded-2xl overflow-hidden">
           <div className="card-body p-6 text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-success/15 text-success flex items-center justify-center text-2xl mx-auto ring-1 ring-success/30 shadow-lg shadow-success/10">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl mx-auto ring-1 ring-emerald-200 shadow-sm">
               ✓
             </div>
 
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-base-content">
+              <h2 className="text-xl font-bold tracking-tight text-[#2E3440]">
                 Saved to Second Brain!
               </h2>
-              <p className="text-xs text-base-content/60 mt-0.5">
+              <p className="text-xs text-[#64748B] mt-0.5">
                 Stored in users/{user.uid.slice(0, 8)}.../notes
               </p>
             </div>
 
             {/* Note Preview Card */}
-            <div className="text-left bg-base-100/90 border border-base-300 rounded-xl p-3.5 space-y-2">
+            <div className="text-left bg-[#F8FAFC] border border-[#D8DEE9] rounded-xl p-3.5 space-y-2">
               <div className="flex items-center gap-1.5">
                 {savedNote.audioUrl && (
-                  <span className="badge badge-secondary badge-xs font-medium">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-pink-50 text-pink-700 ring-1 ring-pink-700/10 shrink-0">
                     🎙️ Voice Memo
                   </span>
                 )}
-                <div className="font-bold text-sm text-base-content line-clamp-1">
+                <div className="font-bold text-sm text-[#2E3440] line-clamp-1">
                   {savedNote.title}
                 </div>
               </div>
@@ -305,12 +304,12 @@ function CaptureInner() {
                 </div>
               )}
 
-              <p className="text-xs text-base-content/70 line-clamp-3 leading-relaxed">
+              <p className="text-xs text-[#4C566A] line-clamp-3 leading-relaxed">
                 {savedNote.plain_text}
               </p>
               <div className="flex items-center gap-1.5 pt-1">
                 {savedNote.tags?.map((tag) => (
-                  <span key={tag} className="badge badge-primary badge-xs font-mono">
+                  <span key={tag} className="bg-[#E5E9F0] text-[#2E3440] px-2 py-0.5 rounded-md text-[10px] font-mono">
                     #{tag}
                   </span>
                 ))}
@@ -319,8 +318,8 @@ function CaptureInner() {
 
             {/* 1-Tap Giant Voice Thought Append Area (Only shown for shared links/text, not voice memos) */}
             {!savedNote.audioUrl && !savedNote.tags?.includes("voice-memo") && modeParam !== "voice" && (
-              <div className="p-3 bg-primary/10 border border-primary/25 rounded-2xl space-y-2">
-                <div className="text-xs font-semibold text-primary">
+              <div className="p-3 bg-blue-50 border border-[#5E81AC]/20 rounded-2xl space-y-2">
+                <div className="text-xs font-semibold text-[#5E81AC]">
                   Want to add your spoken thoughts to this?
                 </div>
 
@@ -328,13 +327,13 @@ function CaptureInner() {
                   <button
                     type="button"
                     onClick={() => setIsAppendingVoice(true)}
-                    className="btn btn-primary btn-block rounded-xl font-bold gap-2 shadow-lg shadow-primary/20 active:scale-95 transition-all text-sm"
+                    className="btn bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none btn-block rounded-xl font-bold gap-2 shadow active:scale-95 transition-all text-sm"
                   >
                     <span className="text-lg">🎙️</span>
                     Add Spoken Thought to this Note
                   </button>
                 ) : (
-                  <div className="flex flex-col items-center justify-center p-2 bg-base-100/80 rounded-xl">
+                  <div className="flex flex-col items-center justify-center p-2 bg-white rounded-xl border border-[#D8DEE9]">
                     <VoiceRecorder
                       autoStart={true}
                       targetNoteId={savedNote.id}
@@ -357,7 +356,7 @@ function CaptureInner() {
             <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <Link
                 href="/dashboard"
-                className="btn btn-neutral btn-sm flex-1 font-semibold"
+                className="btn bg-[#2E3440] hover:bg-[#3B4252] text-white border-none btn-sm flex-1 font-semibold rounded-xl"
               >
                 Go to Dashboard
               </Link>
@@ -370,7 +369,7 @@ function CaptureInner() {
                   setIsAppendingVoice(false);
                   hasAutoSavedRef.current = false;
                 }}
-                className="btn btn-outline btn-sm flex-1"
+                className="btn btn-outline border-[#D8DEE9] text-[#2E3440] hover:bg-[#E5E9F0] btn-sm flex-1 rounded-xl"
               >
                 Capture Another
               </button>
@@ -385,20 +384,20 @@ function CaptureInner() {
   if (modeParam === "voice") {
     return (
       <div className="max-w-md mx-auto w-full p-4">
-        <div className="card bg-base-200/60 backdrop-blur border border-primary/30 shadow-2xl">
+        <div className="bg-white border border-[#D8DEE9] shadow-md rounded-2xl">
           <div className="card-body p-6 text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-primary/15 text-primary flex items-center justify-center text-3xl mx-auto ring-1 ring-primary/30 shadow-lg shadow-primary/10">
+            <div className="w-14 h-14 rounded-2xl bg-[#E5E9F0] text-[#5E81AC] flex items-center justify-center text-3xl mx-auto ring-1 ring-[#D8DEE9] shadow-sm">
               🎙️
             </div>
 
             <div>
-              <h2 className="text-xl font-bold tracking-tight">Instant Voice Capture</h2>
-              <p className="text-xs text-base-content/60 mt-1">
+              <h2 className="text-xl font-bold tracking-tight text-[#2E3440]">Instant Voice Capture</h2>
+              <p className="text-xs text-[#64748B] mt-1">
                 Speak your mind. Gemini will transcribe, summarize, and tag automatically.
               </p>
             </div>
 
-            <div className="flex flex-col items-center justify-center p-4 bg-base-100/80 rounded-2xl border border-base-300">
+            <div className="flex flex-col items-center justify-center p-4 bg-[#F8FAFC] rounded-2xl border border-[#D8DEE9]">
               <VoiceRecorder
                 autoStart={autostartParam}
                 onNoteCreated={(note) => {
@@ -408,7 +407,7 @@ function CaptureInner() {
             </div>
 
             <div className="pt-2">
-              <Link href="/dashboard" className="text-xs text-base-content/60 hover:text-primary transition-colors">
+              <Link href="/dashboard" className="text-xs text-[#64748B] hover:text-[#5E81AC] transition-colors">
                 ← Return to Dashboard
               </Link>
             </div>
@@ -421,18 +420,18 @@ function CaptureInner() {
   // Fallback Manual One-Field Capture View (Rule 4)
   return (
     <div className="max-w-md mx-auto w-full p-4">
-      <div className="card bg-base-200/50 backdrop-blur border border-base-300 shadow-xl">
+      <div className="bg-white border border-[#D8DEE9] shadow-md rounded-2xl">
         <div className="card-body p-6 sm:p-8 space-y-4">
           <div className="flex items-center gap-2">
             <span className="text-2xl">⚡</span>
             <div>
-              <h2 className="text-xl font-bold tracking-tight">Quick Thought Capture</h2>
-              <p className="text-xs text-base-content/60">Instant capture to your Second Brain</p>
+              <h2 className="text-xl font-bold tracking-tight text-[#2E3440]">Quick Thought Capture</h2>
+              <p className="text-xs text-[#64748B]">Instant capture to your Second Brain</p>
             </div>
           </div>
 
           {error && (
-            <div className="alert alert-error text-xs py-2">
+            <div className="alert bg-rose-50 border border-rose-200 text-rose-700 text-xs py-2 rounded-xl">
               <span>{error}</span>
             </div>
           )}
@@ -444,7 +443,7 @@ function CaptureInner() {
                 placeholder="Title (optional)..."
                 value={manualTitle}
                 onChange={(e) => setManualTitle(e.target.value)}
-                className="input input-bordered input-sm w-full bg-base-100 text-sm focus:input-primary"
+                className="w-full px-3 py-2 rounded-xl border border-[#D8DEE9] bg-white text-sm text-[#2E3440] placeholder-[#94A3B8] focus:border-[#5E81AC] outline-none"
               />
             </div>
 
@@ -454,7 +453,7 @@ function CaptureInner() {
                 rows={4}
                 value={manualText}
                 onChange={(e) => setManualText(e.target.value)}
-                className="textarea textarea-bordered w-full bg-base-100 text-sm focus:textarea-primary leading-relaxed"
+                className="w-full px-3 py-2 rounded-xl border border-[#D8DEE9] bg-white text-sm text-[#2E3440] placeholder-[#94A3B8] focus:border-[#5E81AC] outline-none leading-relaxed"
                 required
               />
             </div>
@@ -462,19 +461,19 @@ function CaptureInner() {
             <button
               type="submit"
               disabled={!manualText.trim()}
-              className="btn btn-primary btn-sm w-full font-semibold shadow-md gap-2"
+              className="btn bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none btn-sm w-full font-semibold shadow rounded-xl gap-2"
             >
               Save to Second Brain
             </button>
           </form>
 
           {/* Multimodal Voice Memo Quick Capture */}
-          <div className="divider text-[10px] text-base-content/40 my-1 uppercase tracking-wider font-mono">
+          <div className="divider text-[10px] text-[#94A3B8] my-1 uppercase tracking-wider font-mono before:bg-[#D8DEE9] after:bg-[#D8DEE9]">
             Or Record Voice Memo
           </div>
 
-          <div className="flex flex-col items-center justify-center p-3 bg-base-100/50 rounded-xl border border-dashed border-base-300 gap-2">
-            <span className="text-xs text-base-content/60 text-center">
+          <div className="flex flex-col items-center justify-center p-3 bg-[#F8FAFC] rounded-xl border border-dashed border-[#D8DEE9] gap-2">
+            <span className="text-xs text-[#64748B] text-center">
               Dictate a note with multimodal Gemini 1.5 Flash transcription:
             </span>
             <VoiceRecorder
@@ -485,7 +484,7 @@ function CaptureInner() {
           </div>
 
           <div className="text-center pt-2">
-            <Link href="/dashboard" className="text-xs text-base-content/60 hover:text-primary transition-colors">
+            <Link href="/dashboard" className="text-xs text-[#64748B] hover:text-[#5E81AC] transition-colors">
               ← Return to Dashboard
             </Link>
           </div>
@@ -503,15 +502,15 @@ export default function CapturePage() {
           <Suspense
             fallback={
               <div className="flex flex-col items-center justify-center min-h-[50vh] gap-3">
-                <span className="loading loading-spinner loading-lg text-primary"></span>
-                <span className="text-xs text-base-content/60 font-mono">LOADING CAPTURE...</span>
+                <span className="loading loading-spinner loading-lg text-[#5E81AC]"></span>
+                <span className="text-xs text-[#64748B] font-mono">LOADING CAPTURE...</span>
               </div>
             }
           >
             <CaptureInner />
           </Suspense>
         </main>
-        <footer className="footer footer-center p-4 text-xs text-base-content/40 border-t border-base-300">
+        <footer className="footer footer-center p-4 text-xs text-[#64748B] border-t border-[#D8DEE9]">
           <aside>
             <p>Second Brain PWA • Web Share Target API • Universal Frictionless Voice & Link Capture</p>
           </aside>

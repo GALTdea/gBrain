@@ -5,7 +5,7 @@
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
 | **Framework** | Next.js `16.4.1` (App Router, React `19.3`, TypeScript `5`) | Full-stack web application and API routes (`--webpack` build mode) |
-| **Styling & UI** | Tailwind CSS `v4` + DaisyUI `v5` | Responsive dark-first styling, masonry/grid cards, modals, and badges |
+| **Styling & UI** | Tailwind CSS `v4` + DaisyUI `v5` (`nord` theme) | Modern light "Nord Snow" Scandinavian aesthetic, white cards, soft elevation, and pastel badges |
 | **Rich Text Editor** | TipTap (`@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/pm` `v3.32`) | Block-based rich text editing with JSON + plain-text serialization |
 | **Authentication** | Firebase Auth (`firebase/auth`) | Client-side Email/Password & Google OAuth authentication |
 | **Database** | Cloud Firestore (`firebase/firestore` & `@google-cloud/firestore`) | Multi-tab offline-persistent client SDK + ADC-authenticated Admin SDK |

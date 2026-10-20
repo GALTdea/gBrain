@@ -57,7 +57,7 @@ export default function LoginForm() {
     <div className="w-full max-w-md mx-auto">
       {/* Brand Header */}
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 text-primary mb-4 ring-1 ring-primary/20 shadow-lg shadow-primary/5">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#E5E9F0] text-[#5E81AC] mb-4 ring-1 ring-[#D8DEE9] shadow-sm">
           <svg
             className="w-8 h-8"
             fill="none"
@@ -72,24 +72,24 @@ export default function LoginForm() {
             />
           </svg>
         </div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-base-content">
+        <h1 className="text-3xl font-extrabold tracking-tight text-[#2E3440]">
           Second Brain
         </h1>
-        <p className="text-sm text-base-content/60 mt-1">
+        <p className="text-sm text-[#64748B] mt-1">
           Private Knowledge Base for Gustavo & Gianna
         </p>
       </div>
 
       {/* Main Card */}
-      <div className="card bg-base-200/50 backdrop-blur border border-base-300 shadow-xl">
+      <div className="bg-white border border-[#D8DEE9] shadow-md rounded-2xl">
         <div className="card-body p-6 sm:p-8">
           {/* Active Error Alert */}
           {activeError && (
-            <div className="alert alert-error text-sm py-2 mb-4 rounded-lg flex items-center justify-between">
+            <div className="alert bg-rose-50 border border-rose-200 text-rose-700 text-sm py-2 mb-4 rounded-xl flex items-center justify-between">
               <span>{activeError}</span>
               <button
                 type="button"
-                className="btn btn-ghost btn-xs btn-circle"
+                className="btn btn-ghost btn-xs btn-circle text-rose-700"
                 onClick={() => {
                   setFormError(null);
                   clearError();
@@ -102,7 +102,7 @@ export default function LoginForm() {
 
           {/* Config Missing Notice */}
           {!isConfigured && (
-            <div className="alert alert-info text-xs py-2 mb-4 rounded-lg">
+            <div className="alert bg-blue-50 border border-blue-200 text-[#5E81AC] text-xs py-2 mb-4 rounded-xl">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
@@ -127,7 +127,7 @@ export default function LoginForm() {
             type="button"
             onClick={handleGoogleSignIn}
             disabled={submitting || !isConfigured}
-            className="btn btn-outline border-base-300 hover:bg-base-300 hover:border-base-300 w-full flex items-center justify-center gap-3 font-medium transition-all"
+            className="btn btn-outline border-[#D8DEE9] hover:bg-[#F8FAFC] hover:border-[#CBD5E1] text-[#2E3440] w-full flex items-center justify-center gap-3 font-medium transition-all rounded-xl"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
@@ -150,7 +150,7 @@ export default function LoginForm() {
             Continue with Google
           </button>
 
-          <div className="divider text-xs text-base-content/40 my-4 uppercase tracking-wider font-semibold">
+          <div className="divider text-xs text-[#94A3B8] my-4 uppercase tracking-wider font-semibold before:bg-[#D8DEE9] after:bg-[#D8DEE9]">
             or sign in with email
           </div>
 
@@ -158,7 +158,7 @@ export default function LoginForm() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="form-control">
               <label className="label py-1">
-                <span className="label-text text-xs font-semibold uppercase tracking-wider">
+                <span className="label-text text-xs font-semibold uppercase tracking-wider text-[#2E3440]">
                   Email
                 </span>
               </label>
@@ -168,14 +168,14 @@ export default function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={submitting}
-                className="input input-bordered w-full bg-base-100 focus:input-primary transition-all text-sm"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8DEE9] bg-white text-sm text-[#2E3440] placeholder-[#94A3B8] focus:border-[#5E81AC] outline-none transition-all"
                 required
               />
             </div>
 
             <div className="form-control">
               <label className="label py-1">
-                <span className="label-text text-xs font-semibold uppercase tracking-wider">
+                <span className="label-text text-xs font-semibold uppercase tracking-wider text-[#2E3440]">
                   Password
                 </span>
               </label>
@@ -185,7 +185,7 @@ export default function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={submitting}
-                className="input input-bordered w-full bg-base-100 focus:input-primary transition-all text-sm"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8DEE9] bg-white text-sm text-[#2E3440] placeholder-[#94A3B8] focus:border-[#5E81AC] outline-none transition-all"
                 required
               />
             </div>
@@ -193,10 +193,10 @@ export default function LoginForm() {
             <button
               type="submit"
               disabled={submitting || !isConfigured}
-              className="btn btn-primary w-full mt-2 font-semibold shadow-md"
+              className="btn bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none w-full mt-2 font-semibold shadow rounded-xl"
             >
               {submitting ? (
-                <span className="loading loading-spinner loading-sm"></span>
+                <span className="loading loading-spinner loading-sm text-white"></span>
               ) : (
                 "Sign In"
               )}
@@ -204,22 +204,22 @@ export default function LoginForm() {
           </form>
 
           {/* Demo Fallback Switcher (when configuring or previewing offline) */}
-          <div className="mt-6 pt-4 border-t border-base-300">
-            <div className="text-xs text-center text-base-content/50 mb-3">
+          <div className="mt-6 pt-4 border-t border-[#D8DEE9]">
+            <div className="text-xs text-center text-[#64748B] mb-3">
               Developer Demo Switcher (Simulate Session)
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => loginAsDemoUser("gustavo")}
-                className="btn btn-xs btn-outline border-base-300 hover:border-primary hover:bg-primary/10"
+                className="btn btn-xs btn-outline border-[#D8DEE9] text-[#2E3440] hover:border-[#CBD5E1] hover:bg-[#E5E9F0]"
               >
                 Gustavo (Account 1)
               </button>
               <button
                 type="button"
                 onClick={() => loginAsDemoUser("gianna")}
-                className="btn btn-xs btn-outline border-base-300 hover:border-primary hover:bg-primary/10"
+                className="btn btn-xs btn-outline border-[#D8DEE9] text-[#2E3440] hover:border-[#CBD5E1] hover:bg-[#E5E9F0]"
               >
                 Gianna (Account 2)
               </button>
@@ -229,7 +229,7 @@ export default function LoginForm() {
       </div>
 
       {/* Footer Constraint Notice */}
-      <p className="text-center text-xs text-base-content/40 mt-6">
+      <p className="text-center text-xs text-[#64748B] mt-6">
         🔒 Strict Subcollection Isolation • Open Signups Disabled
       </p>
     </div>
