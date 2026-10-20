@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Note } from "@/types/note";
@@ -8,6 +8,7 @@ import { saveNote } from "@/lib/notes/notes-service";
 
 interface TipTapEditorProps {
   initialNote?: Note | null;
+  initialText?: string;
   userId: string;
   onClose: () => void;
   onSaveSuccess?: (note: Note) => void;
@@ -15,6 +16,7 @@ interface TipTapEditorProps {
 
 export default function TipTapEditor({
   initialNote,
+  initialText,
   userId,
   onClose,
   onSaveSuccess,
@@ -22,7 +24,14 @@ export default function TipTapEditor({
   const [noteId] = useState<string>(
     () => initialNote?.id || `note_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
   );
-  const [title, setTitle] = useState<string>(initialNote?.title || "");
+  const [title, setTitle] = useState<string>(() => {
+    if (initialNote?.title) return initialNote.title;
+    if (initialText?.trim()) {
+      const firstLine = initialText.trim().split("\n")[0].trim().replace(/^#+\s*/, "");
+      return firstLine.length > 60 ? `${firstLine.substring(0, 60)}...` : firstLine;
+    }
+    return "";
+  });
   const [tags, setTags] = useState<string[]>(initialNote?.tags || []);
   const [tagInput, setTagInput] = useState<string>("");
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "error">(
@@ -37,13 +46,30 @@ export default function TipTapEditor({
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef<boolean>(true);
-  const lastSavedPlainTextRef = useRef<string | undefined>(initialNote?.plain_text);
+  const lastSavedPlainTextRef = useRef<string | undefined>(
+    initialNote?.plain_text || initialText
+  );
+
+  const initialContent = useMemo(() => {
+    if (initialNote?.content) return initialNote.content;
+    if (initialText?.trim()) {
+      const paragraphs = initialText.trim().split(/\n\n+/);
+      return {
+        type: "doc",
+        content: paragraphs.map((p) => ({
+          type: "paragraph",
+          content: p.trim() ? [{ type: "text", text: p.trim() }] : [],
+        })),
+      };
+    }
+    return "";
+  }, [initialNote, initialText]);
 
   // Initialize TipTap editor
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [StarterKit],
-    content: initialNote?.content || "",
+    content: initialContent,
     editorProps: {
       attributes: {
         class: "tiptap focus:outline-none min-h-[300px] px-4 py-3 text-base-content/90 leading-relaxed",

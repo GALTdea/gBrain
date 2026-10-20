@@ -105,6 +105,7 @@ export default function NotesDashboard() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [activeEditingNote, setActiveEditingNote] = useState<Note | null>(null);
+  const [editorInitialText, setEditorInitialText] = useState<string>("");
   const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
   const [isSavingQuickNote, setIsSavingQuickNote] = useState<boolean>(false);
   const [isSeedingNotes, setIsSeedingNotes] = useState<boolean>(false);
@@ -199,19 +200,61 @@ export default function NotesDashboard() {
     }
   };
 
-  const handleStartNewNote = () => {
+  const handleStartNewNote = (initialText?: string | React.MouseEvent) => {
     setActiveEditingNote(null);
+    setEditorInitialText(typeof initialText === "string" ? initialText : "");
     setIsCreatingNew(true);
   };
 
   const handleOpenNote = (note: Note) => {
     setActiveEditingNote(note);
+    setEditorInitialText("");
     setIsCreatingNew(false);
   };
 
   const handleCloseEditor = () => {
     setActiveEditingNote(null);
+    setEditorInitialText("");
     setIsCreatingNew(false);
+  };
+
+  const saveQuickNote = async (rawText: string) => {
+    const text = rawText.trim();
+    if (!text || !user?.uid) return;
+
+    setIsSavingQuickNote(true);
+
+    const newId = `note_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const firstLine = text.split("\n")[0].trim();
+    const title = firstLine.length > 60 ? `${firstLine.substring(0, 60)}...` : firstLine;
+
+    const newNoteData: Note = {
+      id: newId,
+      title,
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text }],
+          },
+        ],
+      },
+      plain_text: text,
+      tags: [],
+      userId: user.uid,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    try {
+      setSearchQuery("");
+      await saveNote(user.uid, newNoteData);
+    } catch (err) {
+      console.error("Failed to quick-save note from Omnibar:", err);
+    } finally {
+      setIsSavingQuickNote(false);
+    }
   };
 
   const handleOmnibarKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -219,43 +262,8 @@ export default function NotesDashboard() {
       if (activeTab === "search") {
         return;
       }
-      const text = searchQuery.trim();
-      if (!text || !user?.uid) return;
-
       e.preventDefault();
-      setIsSavingQuickNote(true);
-
-      const newId = `note_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const firstLine = text.split("\n")[0].trim();
-      const title = firstLine.length > 60 ? `${firstLine.substring(0, 60)}...` : firstLine;
-
-      const newNoteData: Note = {
-        id: newId,
-        title,
-        content: {
-          type: "doc",
-          content: [
-            {
-              type: "paragraph",
-              content: [{ type: "text", text }],
-            },
-          ],
-        },
-        plain_text: text,
-        tags: [],
-        userId: user.uid,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-
-      try {
-        setSearchQuery("");
-        await saveNote(user.uid, newNoteData);
-      } catch (err) {
-        console.error("Failed to quick-save note from Omnibar:", err);
-      } finally {
-        setIsSavingQuickNote(false);
-      }
+      await saveQuickNote(searchQuery);
     }
   };
 
@@ -287,6 +295,18 @@ export default function NotesDashboard() {
               {seedFeedback}
             </span>
           )}
+
+          {/* Create New Note button */}
+          <button
+            type="button"
+            onClick={() => handleStartNewNote()}
+            className="btn btn-sm btn-primary text-xs font-semibold gap-1.5 shadow-sm"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>New Note</span>
+          </button>
 
           <button
             type="button"
@@ -322,6 +342,7 @@ export default function NotesDashboard() {
         <section className="animate-in fade-in duration-200">
           <TipTapEditor
             initialNote={activeEditingNote}
+            initialText={editorInitialText}
             userId={user?.uid || ""}
             onClose={handleCloseEditor}
             onSaveSuccess={(saved) => {
@@ -384,6 +405,27 @@ export default function NotesDashboard() {
               )}
 
               <div className="flex items-center gap-1 shrink-0 pl-1.5 border-l border-base-300/80">
+                {/* Full note editor launcher */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = searchQuery;
+                    setSearchQuery("");
+                    handleStartNewNote(text);
+                  }}
+                  className="btn btn-circle btn-sm btn-ghost text-base-content/70 hover:text-primary hover:bg-primary/10 transition-colors"
+                  title="Open in full note editor"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                    />
+                  </svg>
+                </button>
+
                 {/* Microphone button (VoiceRecorder) */}
                 <VoiceRecorder
                   compact
@@ -410,15 +452,33 @@ export default function NotesDashboard() {
               </div>
             </div>
 
-            {/* Subtle helper hint when user types in notes mode */}
+            {/* Helper hint when user types in notes mode */}
             {activeTab === "notes" && searchQuery.trim().length > 0 && (
-              <div className="flex items-center justify-between text-[11px] text-base-content/50 px-3 pt-1.5 font-sans">
-                <span>
-                  Filtering notes containing &ldquo;{searchQuery.trim()}&rdquo;
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-[11px] text-base-content/60 px-3 pt-2 font-sans">
+                <span className="truncate max-w-[220px] sm:max-w-xs text-base-content/70">
+                  Filtering notes for &ldquo;{searchQuery.trim().length > 30 ? searchQuery.trim().substring(0, 30) + "…" : searchQuery.trim()}&rdquo;
                 </span>
-                <span className="font-medium text-primary flex items-center gap-1">
-                  Press <kbd className="kbd kbd-xs bg-base-300">Enter ↵</kbd> to save as note
-                </span>
+                <div className="flex items-center gap-2 shrink-0 whitespace-nowrap ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = searchQuery;
+                      setSearchQuery("");
+                      handleStartNewNote(text);
+                    }}
+                    className="btn btn-xs btn-primary font-medium gap-1 shadow-sm"
+                  >
+                    <span>📝 Open in Full Editor</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => saveQuickNote(searchQuery)}
+                    disabled={isSavingQuickNote}
+                    className="text-primary hover:underline font-medium flex items-center gap-1"
+                  >
+                    Press <kbd className="kbd kbd-xs bg-base-300">Enter ↵</kbd> to quick-save
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -450,24 +510,37 @@ export default function NotesDashboard() {
               </button>
             </div>
 
-            {activeTab === "notes" ? (
+            <div className="flex items-center gap-2 self-start sm:self-auto">
               <button
                 type="button"
-                onClick={() => setActiveTab("search")}
-                className="btn btn-ghost btn-xs text-primary gap-1.5 self-start sm:self-auto font-medium hover:bg-primary/10"
+                onClick={() => handleStartNewNote()}
+                className="btn btn-primary btn-sm font-semibold gap-1.5 shadow-sm"
               >
-                <span>✨ Ask AI about your notes</span>
-                <span>→</span>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>New Note</span>
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setActiveTab("notes")}
-                className="btn btn-ghost btn-xs gap-1.5 self-start sm:self-auto font-medium"
-              >
-                <span>← Back to Notes</span>
-              </button>
-            )}
+
+              {activeTab === "notes" ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("search")}
+                  className="btn btn-ghost btn-sm text-primary gap-1.5 font-medium hover:bg-primary/10"
+                >
+                  <span>✨ Ask AI about your notes</span>
+                  <span>→</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("notes")}
+                  className="btn btn-ghost btn-sm gap-1.5 font-medium"
+                >
+                  <span>← Back to Notes</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Search Your Brain Tab */}
@@ -697,6 +770,21 @@ export default function NotesDashboard() {
             </div>
           )}
         </section>
+      )}
+
+      {/* Floating Action Button (FAB) for quick note creation anywhere on screen */}
+      {!isCreatingNew && !activeEditingNote && (
+        <button
+          type="button"
+          onClick={() => handleStartNewNote()}
+          className="fixed bottom-6 right-6 z-40 btn btn-circle btn-primary btn-lg shadow-2xl hover:scale-105 active:scale-95 transition-all text-white flex items-center justify-center border-2 border-primary/30"
+          title="Create New Note (+)"
+          aria-label="Create New Note"
+        >
+          <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       )}
     </div>
   );
