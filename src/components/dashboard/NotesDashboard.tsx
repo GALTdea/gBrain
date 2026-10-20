@@ -550,17 +550,6 @@ export default function NotesDashboard() {
             </div>
 
             <div className="flex items-center gap-2 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => handleStartNewNote()}
-                className="btn bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none btn-sm font-semibold gap-1.5 shadow-sm"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>New Note</span>
-              </button>
-
               {activeTab === "notes" ? (
                 <button
                   type="button"
