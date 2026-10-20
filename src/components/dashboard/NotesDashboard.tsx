@@ -300,7 +300,7 @@ export default function NotesDashboard() {
           <button
             type="button"
             onClick={() => handleStartNewNote()}
-            className="btn btn-sm bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none text-xs font-semibold gap-1.5 shadow-sm"
+            className="btn btn-sm bg-[#5E81AC] hover:bg-[#81A1C1] text-white border-none text-xs font-semibold gap-1.5 shadow-sm rounded-xl"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -308,32 +308,71 @@ export default function NotesDashboard() {
             <span>New Note</span>
           </button>
 
-          <button
-            type="button"
-            onClick={handleSeedNotes}
-            disabled={isSeedingNotes}
-            className="btn btn-sm btn-outline border-[#D8DEE9] text-[#2E3440] hover:bg-[#E5E9F0] hover:border-[#CBD5E1] text-xs font-semibold gap-1.5"
-            title="Import 80 notes from data/lords_favor_restoration_notes.md and compute embeddings"
-          >
-            {isSeedingNotes ? (
-              <>
-                <span className="loading loading-spinner loading-xs text-[#5E81AC]"></span>
-                <span>Seeding 80 Notes...</span>
-              </>
-            ) : (
-              <>
-                <span>📥</span>
-                <span>{notes.length >= 80 ? "Re-seed 80 Keep Notes" : "Import 80 Keep Notes"}</span>
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={() => signOut()}
-            className="btn btn-ghost btn-sm text-xs text-[#64748B] hover:bg-rose-50 hover:text-rose-700"
-          >
-            Sign Out
-          </button>
+          {/* User Avatar & Settings Dropdown */}
+          <div className="dropdown dropdown-end">
+            <div
+              tabIndex={0}
+              role="button"
+              className="btn btn-ghost btn-circle btn-sm bg-[#E5E9F0] text-[#5E81AC] hover:bg-[#D8DEE9] text-xs font-bold ring-1 ring-[#D8DEE9] shadow-sm flex items-center justify-center select-none"
+              title={user?.displayName || user?.email || "Account & Settings"}
+              aria-label="User account and settings menu"
+            >
+              {user?.displayName
+                ? user.displayName.slice(0, 2).toUpperCase()
+                : user?.email
+                ? user.email.slice(0, 2).toUpperCase()
+                : "👤"}
+            </div>
+            <ul
+              tabIndex={0}
+              className="menu menu-sm dropdown-content mt-2 z-[60] p-2 shadow-lg bg-white rounded-2xl border border-[#D8DEE9] w-64 text-[#2E3440] space-y-1"
+            >
+              <li className="menu-title px-3 py-1.5">
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-xs text-[#2E3440] truncate">
+                    {user?.displayName || "Second Brain User"}
+                  </span>
+                  <span className="text-[10px] text-[#64748B] font-mono truncate">
+                    {user?.email}
+                  </span>
+                </div>
+              </li>
+              <div className="divider my-1 border-t border-[#D8DEE9]/60"></div>
+              <li>
+                <button
+                  type="button"
+                  onClick={handleSeedNotes}
+                  disabled={isSeedingNotes}
+                  className="flex items-center gap-2 py-2 text-xs font-medium hover:bg-[#E5E9F0] text-[#2E3440] rounded-xl"
+                  title="Import 80 notes from data/lords_favor_restoration_notes.md and compute embeddings"
+                >
+                  {isSeedingNotes ? (
+                    <>
+                      <span className="loading loading-spinner loading-xs text-[#5E81AC]"></span>
+                      <span>Importing 80 Keep Notes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm">📥</span>
+                      <span>{notes.length >= 80 ? "Re-seed 80 Keep Notes" : "Import 80 Keep Notes"}</span>
+                    </>
+                  )}
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  className="flex items-center gap-2 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 rounded-xl"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <span>Sign Out</span>
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
       </header>
 
