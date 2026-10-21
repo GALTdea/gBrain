@@ -16,6 +16,7 @@ import {
 
 interface VoiceRecorderProps {
   onNoteCreated?: (note: Note) => void;
+  onCancel?: () => void;
   compact?: boolean;
   fullScreen?: boolean;
   autoStart?: boolean; // Instantly start recording when loaded (e.g. from shortcut)
@@ -55,6 +56,7 @@ function getSupportedMimeType(): { mimeType: string; extension: string } {
 
 export default function VoiceRecorder({
   onNoteCreated,
+  onCancel,
   compact = false,
   fullScreen,
   autoStart = false,
@@ -82,6 +84,7 @@ export default function VoiceRecorder({
   const animationFrameRef = useRef<number | null>(null);
   const currentDraftIdRef = useRef<string | null>(null);
   const waveformCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hasAutoStartedRef = useRef<boolean>(false);
 
   // Request screen wake lock so recording is not terminated if screen dims
   const requestWakeLock = async () => {
@@ -310,9 +313,10 @@ export default function VoiceRecorder({
     }
   }, [user, targetNoteId, sharedContext]);
 
-  // Handle auto-start trigger on mount
+  // Handle auto-start trigger on mount (strictly once per mount)
   useEffect(() => {
-    if (autoStart && !isRecording && !isProcessing) {
+    if (autoStart && !hasAutoStartedRef.current && !isRecording && !isProcessing) {
+      hasAutoStartedRef.current = true;
       const timer = setTimeout(() => {
         startRecording();
       }, 150);
@@ -354,6 +358,10 @@ export default function VoiceRecorder({
     setRecordSeconds(0);
     setAudioLevel(0);
     setStatusMessage(null);
+
+    if (onCancel) {
+      onCancel();
+    }
   };
 
   const stopAndProcessRecording = async () => {

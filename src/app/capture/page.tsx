@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useState, useRef, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { saveNote } from "@/lib/notes/notes-service";
@@ -23,6 +23,7 @@ function extractSummary(note: Note): string {
 }
 
 function CaptureInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading } = useAuth();
 
@@ -390,6 +391,7 @@ function CaptureInner() {
                       setSavedNote(updatedNote);
                       setIsAppendingVoice(false);
                     }}
+                    onCancel={() => setIsAppendingVoice(false)}
                   />
                 </div>
               )}
@@ -433,6 +435,13 @@ function CaptureInner() {
           fullScreen={true}
           onNoteCreated={(note) => {
             setSavedNote(note);
+          }}
+          onCancel={() => {
+            if (modeParam === "voice") {
+              router.push("/dashboard");
+            } else {
+              setIsVoiceCaptureMode(false);
+            }
           }}
         />
       </div>
