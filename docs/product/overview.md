@@ -1,22 +1,32 @@
 # Product Overview: Second Brain (`gBrain`)
 
-## 1. Product Vision & Philosophy
+## 1. Product Vision & Application Boundaries
 **Second Brain (`gBrain`)** is a zero-cost, frictionless personal knowledge management Progressive Web App (PWA) built exclusively for **Gustavo and Gianna**.
 
-Traditional note-taking apps force users to choose between fast capture (like Google Keep or voice memos) and deep retrieval (like Notion or Obsidian). `gBrain` bridges that gap by combining:
-1. **Zero-Friction Capture:** 1-tap voice recording, OS share-sheet interception (Android/Pixel Web Share Target for links, text, and Pixel Recorder audio files), and an omnibar quick-entry flow.
-2. **Structured Rich Editing:** A clean, distraction-free block editor powered by TipTap with automatic background saving.
-3. **AI-Powered Synthesis & Retrieval:** Automatic 768-dimensional semantic indexing and multimodal Gemini analysis that turns raw notes, shared links, and spoken thoughts into a conversational knowledge base with grounded citations.
+### What gBrain Is:
+* **Always-Reachable, Zero-Friction Capture:** 1-tap voice recording, OS share-sheet interception (Android/Pixel Web Share Target for links, text, and Pixel Recorder audio files), and quick-entry flows that capture thoughts instantly without cognitive load or filing decisions.
+* **Dual-Paradigm Retrieval:**
+  1. **Exploratory & Ideation Mode (AI/Vector RAG):** Semantic search and conversational synthesis across sprawling thoughts, problem-solving reflections, creative sparks, and saved web resources.
+  2. **Deterministic Timeline & Audit Mode (Chronological Querying):** 100% complete, zero-dropped-entry date-range filtering for work logs, meeting records, incident tracking, and timesheet hour aggregation.
+
+### What gBrain Is NOT (Application Boundaries):
+* **Not an OS Alarm Clock or Calendar Event Manager:** Exact-minute time alarms and calendar appointments belong in native OS tools (Google Calendar, Apple Reminders) that have background push reliability.
+* **Not a Rigid Database or Relational Spreadsheet:** Strict table schemas, multi-column databases, or multi-user grocery checkout lists introduce unnecessary filing friction.
+
+Traditional note apps force users to choose between fast capture (like Google Keep or voice memos) and deep retrieval (like Notion or Obsidian). `gBrain` bridges that gap by combining zero-friction capture with rich TipTap block editing, 768-dimensional semantic RAG search, and deterministic chronological audit trails.
 
 ---
 
-## 2. Target Users & Multi-User Isolation Model
+## 2. Target Users, Personas & Data Isolation
 * **Users:** Gustavo and Gianna (2-user private system).
+* **Primary User Personas & Workflows:**
+  * **Gustavo (Creative & Problem-Solving Ideation Vault):** Walking thoughts, engineering epiphanies, architecture designs, creative ideas, and "open loops" to revisit later via Conversational RAG.
+  * **Gianna (Frictionless Daily Union Work Log):** On-the-go voice documentation of shift events, member conversations, grievances, and work hours. Retrieved at the end of the week via **deterministic date-range filtering** (guaranteeing 0 dropped logs) and synthesized into weekly timesheet summaries.
 * **Authentication Policy:** Open signups are disabled. Accounts are provisioned manually via Firebase Authentication (Email/Password and Google Sign-In) with persistent session storage.
 * **Strict Data Isolation:** Both users share a single codebase and deployment, but their data is strictly isolated at the database and storage layer:
   * **Firestore:** Scoped to `users/{userId}/notes/{noteId}` where `request.auth.uid == userId`.
   * **Firebase Storage:** Scoped to `users/{userId}/audio/{fileName}` with a 25MB limit and `audio/*` MIME enforcement.
-  * **Vector Search:** All semantic and hybrid queries execute strictly within the authenticated user's `users/{userId}/notes` subcollection—preventing any cross-user data leakage.
+  * **Vector & Chronological Search:** All queries execute strictly within the authenticated user's `users/{userId}/notes` subcollection—preventing any cross-user data leakage.
 
 ---
 
@@ -41,7 +51,10 @@ Traditional note-taking apps force users to choose between fast capture (like Go
   * Sharing a link or text snippet from any mobile app into Second Brain immediately saves the note upon session verification.
   * **1-Tap Spoken Thought Append:** Right after a shared link is saved on `/capture`, a prominent *"Add Spoken Thought to this Note"* button lets the user dictate why the link matters. Gemini synthesizes their voice commentary together with the shared link context and updates the note.
   * **Shared Audio Ingestion (e.g., Pixel Recorder):** Sharing an `.m4a`/audio file from an external recorder intercepts the binary via the Service Worker (`public/sw.js`), stores it in IndexedDB (`shared_media`), and automatically transcribes, summarizes, tags, and indexes it on `/capture`.
-* **PWA App Shortcuts:** Long-pressing the app icon offers **"Instant Voice Note"** (`/capture?mode=voice&autostart=1`) and **"Quick Text Capture"** (`/capture`).
+* **PWA App Shortcuts:** Long-pressing the app icon offers:
+  * **"Instant Voice Note"** (`/capture?mode=voice&autostart=1`)
+  * **"Log Work"** (`/capture?mode=voice&autostart=1&tag=union`) for 1-tap guaranteed tagging of work/union field notes.
+  * **"Quick Text Capture"** (`/capture`).
 
 ### D. Multimodal Voice Capture (`VoiceRecorder`)
 * Available from the Dashboard Omnibar, `/capture` page, or PWA shortcut.
@@ -50,9 +63,14 @@ Traditional note-taking apps force users to choose between fast capture (like Go
   1. A concise 3–7 word **Title**.
   2. A 1–3 sentence **AI Summary**.
   3. A verbatim **Transcript**.
-  4. Relevant **Tags** (including `#voice-memo`).
+  4. Relevant **Tags** (including `#voice-memo` and any pre-assigned target tag like `#union`).
 
 ### E. Conversational RAG Search ("Search Your Brain")
 * Users ask natural-language questions across their entire knowledge base.
 * The system embeds the query (`768` dimensions), runs a hybrid retrieval pipeline (Firestore `findNearest` vector search + keyword/tag/title boosting), and synthesizes a structured answer via Gemini with explicit `[Note: Title]` citations and collapsible source cards showing match percentages.
+
+### F. Deterministic Timeline Review & Timesheet Rollup
+* **100% Complete Audit Trail:** When it's time to log weekly hours or review union documentation, users filter notes by **deterministic date ranges** (`Today`, `This Week`, `Last Week`, or custom date picker) combined with `#tag` filtering.
+* **Direct Database Ordering:** Notes are rendered in chronological or reverse-chronological order directly from Firestore (`createdAt` index), guaranteeing zero missed entries or AI hallucination gaps.
+* **1-Click Timesheet & Activity Rollup:** Users click *"✨ Summarize for Timesheet"*, and Gemini synthesizes an organized breakdown of hours worked, activities completed, and follow-ups pending, with links to the underlying audio recordings and transcripts.
 

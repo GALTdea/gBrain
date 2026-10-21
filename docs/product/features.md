@@ -39,7 +39,7 @@ This document catalogs the currently implemented features in `gBrain`, where the
 * **Cross-Platform MIME Normalization:** Automatically selects the best supported recording format (`audio/webm;codecs=opus`, `audio/mp4`, `audio/aac`, `audio/ogg`) and normalizes MIME headers before calling Gemini so codec strings never cause `400` errors.
 * **Multimodal Synthesis (`/api/voice`):** Uses Gemini (`processMultimodalVoiceMemo`) to generate structured JSON (`title`, `summary`, `transcript`, `tags`), formats a rich TipTap document with links to the audio file and any referenced URL, and embeds the combined text.
 
-### Conversational RAG Search
+### Conversational RAG Search (Exploratory Retrieval)
 * **Hybrid Retrieval Pipeline (`/api/search`, aliased at `/api/rag` & `/api/chat`):**
   1. Generates a 768-dimensional query vector via `text-embedding-004` / `gemini-embedding-001`.
   2. Executes Firestore `findNearest` (`limit: 30`, `COSINE` distance) on `users/{userId}/notes`.
@@ -49,7 +49,15 @@ This document catalogs the currently implemented features in `gBrain`, where the
 
 ---
 
-## 2. Known Gaps & Candidates for Future Stages
+## 2. Planned Stage 1: Deterministic Timeline & Timesheet Rollup
+Designed for high-certainty documentation (e.g. Gianna's union logs, timesheet preparation, and chronological audit trails):
+* **Hard-Locked Context Capture (`/capture?tag=union`):** Dedicated PWA shortcut ("Log Work") and query parameter that automatically stamps incoming voice notes with a guaranteed target tag (`#union` / `#work-log`) with zero manual effort.
+* **Deterministic Date-Range Filter Bar:** Interactive filter on the Dashboard (`[ All ]`, `[ Today ]`, `[ This Week ]`, `[ Last Week ]`, `[ Custom Range 📅 ]`) querying Firestore by timestamp (`createdAt`), guaranteeing 100% complete retrieval without fuzzy vector drop-offs.
+* **End-of-Week Timesheet / Activity Synthesis (`/api/timesheet`):** 1-click button on filtered views that passes the exact verified notes to Gemini, generating a formatted weekly activity log and hours breakdown with direct links to audio recordings.
+
+---
+
+## 3. Known Gaps & Candidates for Future Stages
 * **Pending Voice Draft Recovery UI:** [`getPendingVoiceDrafts()`](file:///Users/gustavo/dev/projects/gBrain/src/lib/voice/voice-draft-store.ts#L156-L174) exists in `voice-draft-store.ts` to find interrupted recordings in IndexedDB, but there is no UI banner in the Dashboard yet to replay/retry syncing an interrupted draft on next app launch.
 * **Server-Side Auth Token Verification on API Routes:** API routes (`/api/embed`, `/api/search`, `/api/voice`, `/api/seed`) currently accept `userId` in the JSON request body and sanitize path segments. Adding Firebase ID token (`Authorization: Bearer <token>`) verification via `firebase-admin` on the server would harden API security to match the client-side Firestore/Storage rules.
 * **Pinning & Archiving Notes:** Imported Keep notes tag pinned items with `#pinned`, but the Dashboard grid does not yet separate Pinned notes into a top section or support archiving.
