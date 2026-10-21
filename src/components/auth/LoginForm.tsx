@@ -7,7 +7,6 @@ export default function LoginForm() {
   const {
     signInWithEmail,
     signInWithGoogle,
-    loginAsDemoUser,
     error,
     clearError,
     isConfigured,
@@ -202,29 +201,6 @@ export default function LoginForm() {
               )}
             </button>
           </form>
-
-          {/* Demo Fallback Switcher (when configuring or previewing offline) */}
-          <div className="mt-6 pt-4 border-t border-[#D8DEE9]">
-            <div className="text-xs text-center text-[#64748B] mb-3">
-              Developer Demo Switcher (Simulate Session)
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => loginAsDemoUser("gustavo")}
-                className="btn btn-xs btn-outline border-[#D8DEE9] text-[#2E3440] hover:border-[#CBD5E1] hover:bg-[#E5E9F0]"
-              >
-                Gustavo (Account 1)
-              </button>
-              <button
-                type="button"
-                onClick={() => loginAsDemoUser("gianna")}
-                className="btn btn-xs btn-outline border-[#D8DEE9] text-[#2E3440] hover:border-[#CBD5E1] hover:bg-[#E5E9F0]"
-              >
-                Gianna (Account 2)
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 

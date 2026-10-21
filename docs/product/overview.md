@@ -12,7 +12,7 @@ Traditional note-taking apps force users to choose between fast capture (like Go
 
 ## 2. Target Users & Multi-User Isolation Model
 * **Users:** Gustavo and Gianna (2-user private system).
-* **Authentication Policy:** Open signups are disabled. Accounts are provisioned manually via Firebase Authentication (Email/Password and Google Sign-In). A local demo mode (`usr_gustavo_01`, `usr_gianna_02`) is also supported for offline/local UI testing.
+* **Authentication Policy:** Open signups are disabled. Accounts are provisioned manually via Firebase Authentication (Email/Password and Google Sign-In) with persistent session storage.
 * **Strict Data Isolation:** Both users share a single codebase and deployment, but their data is strictly isolated at the database and storage layer:
   * **Firestore:** Scoped to `users/{userId}/notes/{noteId}` where `request.auth.uid == userId`.
   * **Firebase Storage:** Scoped to `users/{userId}/audio/{fileName}` with a 25MB limit and `audio/*` MIME enforcement.

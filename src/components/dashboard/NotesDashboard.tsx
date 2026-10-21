@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { Note } from "@/types/note";
-import { subscribeToUserNotes, deleteNote, saveNote, saveLocalDemoNotes } from "@/lib/notes/notes-service";
+import { subscribeToUserNotes, deleteNote, saveNote } from "@/lib/notes/notes-service";
 import VoiceRecorder from "@/components/voice/VoiceRecorder";
 
 /**
@@ -127,10 +127,6 @@ export default function NotesDashboard() {
       }
       if (Array.isArray(data.notes) && data.notes.length > 0) {
         setNotes(data.notes);
-        if (user.uid.startsWith("usr_")) {
-          saveLocalDemoNotes(user.uid, data.notes);
-          window.dispatchEvent(new Event("gbrain-notes-updated"));
-        }
       }
       setSeedFeedback(`Imported ${data.notesCount || 80} Keep notes!`);
       setTimeout(() => setSeedFeedback(null), 4000);

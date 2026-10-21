@@ -104,14 +104,14 @@ gBrain/
     │       ├── voice/route.ts       # Multimodal audio transcription, summary & note creation
     │       └── seed/route.ts        # Batch parser & embedding seeder for Keep markdown
     ├── components/
-    │   ├── auth/LoginForm.tsx       # Email/Password, Google Sign-In & Demo mode login UI
+    │   ├── auth/LoginForm.tsx       # Email/Password & Google Sign-In login UI
     │   ├── dashboard/               # NotesDashboard.tsx (Omnibar, grid, tabs, voice cards)
     │   ├── editor/TipTapEditor.tsx  # Rich block editor with debounced auto-save
     │   ├── pwa/                     # ServiceWorkerRegister.tsx
     │   ├── search/                  # ConversationalSearch.tsx (AI Q&A + source citations)
     │   └── voice/VoiceRecorder.tsx  # WakeLock, audio visualizer, IndexedDB chunking, upload
     ├── context/
-    │   └── AuthContext.tsx          # React Auth context with localStorage fast-hydration
+    │   └── AuthContext.tsx          # Global React Auth context with persistent session management
     ├── lib/
     │   ├── firebase/client.ts       # Client Firebase app, Auth, Persistent Firestore, Storage
     │   ├── firebase/admin.ts        # Server Admin Firestore, Vertex AI, GenAI & fallbacks

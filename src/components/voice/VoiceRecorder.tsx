@@ -410,7 +410,7 @@ export default function VoiceRecorder({
         let audioStorageUri = "";
 
         // Attempt upload to Firebase Storage if configured (with a 4s timeout so local dev doesn't hang)
-        if (storage && isFirebaseConfigured && user && !user.uid.startsWith("usr_")) {
+        if (storage && isFirebaseConfigured && user) {
           try {
             setStatusMessage("Uploading audio to Firebase Storage...");
             const audioRef = ref(storage, storagePath);

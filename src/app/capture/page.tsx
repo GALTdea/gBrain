@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { saveNote } from "@/lib/notes/notes-service";
 import { Note } from "@/types/note";
 import LoginForm from "@/components/auth/LoginForm";
@@ -518,21 +518,19 @@ function CaptureInner() {
 
 export default function CapturePage() {
   return (
-    <AuthProvider>
-      <div className="min-h-dvh bg-slate-950 text-slate-100 p-4 pb-8 flex flex-col justify-between">
-        <Suspense
-          fallback={
-            <div className="flex flex-col items-center justify-center flex-1 min-h-[60vh] gap-3">
-              <span className="loading loading-spinner loading-lg text-rose-500"></span>
-              <span className="text-xs text-slate-400 font-mono tracking-wider">
-                LOADING CAPTURE...
-              </span>
-            </div>
-          }
-        >
-          <CaptureInner />
-        </Suspense>
-      </div>
-    </AuthProvider>
+    <div className="min-h-dvh bg-slate-950 text-slate-100 p-4 pb-8 flex flex-col justify-between">
+      <Suspense
+        fallback={
+          <div className="flex flex-col items-center justify-center flex-1 min-h-[60vh] gap-3">
+            <span className="loading loading-spinner loading-lg text-rose-500"></span>
+            <span className="text-xs text-slate-400 font-mono tracking-wider">
+              LOADING CAPTURE...
+            </span>
+          </div>
+        }
+      >
+        <CaptureInner />
+      </Suspense>
+    </div>
   );
 }

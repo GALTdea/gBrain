@@ -8,9 +8,8 @@ This document catalogs the currently implemented features in `gBrain`, where the
 
 ### Authentication & Multi-User Isolation
 * **Email/Password & Google OAuth Sign-In:** Managed via [`AuthContext.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/context/AuthContext.tsx) and [`LoginForm.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/components/auth/LoginForm.tsx).
-* **Instant Auth Cache Hydration:** Caches basic user profile metadata in `localStorage` (`gbrain_cached_auth_user`) to prevent layout flash during cold starts while Firebase verifies the token.
+* **Persistent Session Management:** Explicit browser IndexedDB persistence via `browserLocalPersistence` and global layout-level `<AuthProvider>` wrapper in [`layout.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/app/layout.tsx), keeping user authenticated across page reloads.
 * **Closed Signup Messaging:** Explicitly informs unauthorized users when an account is not found that open signups are disabled.
-* **Offline / Demo Mode (`loginAsDemoUser`):** Allows switching between mock `Gustavo` (`usr_gustavo_01`) and `Gianna` (`usr_gianna_02`) accounts backed by `localStorage` when Firebase credentials are not present.
 
 ### Dashboard & Note Management
 * **Real-Time Firestore Sync:** [`subscribeToUserNotes`](file:///Users/gustavo/dev/projects/gBrain/src/lib/notes/notes-service.ts#L42-L114) listens to `users/{userId}/notes` ordered by `updatedAt desc`, backed by Firestore `persistentLocalCache` (`persistentMultipleTabManager`) for offline resilience.

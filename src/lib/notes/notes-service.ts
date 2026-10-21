@@ -49,8 +49,8 @@ export function subscribeToUserNotes(
     return () => {};
   }
 
-  // Fallback to local storage if Firebase is unconfigured or demo user is active
-  if (!db || !isFirebaseConfigured || userId.startsWith("usr_")) {
+  // Fallback to local storage only if Firebase is unconfigured
+  if (!db || !isFirebaseConfigured) {
     const notes = getLocalDemoNotes(userId);
     // Sort descending by updatedAt
     notes.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -172,13 +172,13 @@ export async function saveNote(
           fullNote.embedding = data.embedding;
 
           // Write 768-dim float array into Firestore subcollection document
-          if (db && isFirebaseConfigured && !userId.startsWith("usr_")) {
+          if (db && isFirebaseConfigured) {
             const docRef = doc(db, "users", userId, "notes", note.id);
             setDoc(docRef, { embedding: data.embedding, updatedAt: Date.now() }, { merge: true }).catch((err) =>
               console.warn("[Embedding Service] Firestore embedding write deferred:", err)
             );
           } else {
-            // Update local demo notes for offline/demo mode
+            // Update local fallback notes for unconfigured mode
             const demoNotes = getLocalDemoNotes(userId);
             const idx = demoNotes.findIndex((n) => n.id === note.id);
             if (idx >= 0) {
@@ -193,7 +193,7 @@ export async function saveNote(
       });
   }
 
-  if (!db || !isFirebaseConfigured || userId.startsWith("usr_")) {
+  if (!db || !isFirebaseConfigured) {
     const existing = getLocalDemoNotes(userId);
     const index = existing.findIndex((n) => n.id === note.id);
     if (index >= 0) {
@@ -225,7 +225,7 @@ export async function saveNote(
 export async function deleteNote(userId: string, noteId: string): Promise<void> {
   if (!userId || !noteId) return;
 
-  if (!db || !isFirebaseConfigured || userId.startsWith("usr_")) {
+  if (!db || !isFirebaseConfigured) {
     const existing = getLocalDemoNotes(userId);
     const filtered = existing.filter((n) => n.id !== noteId);
     saveLocalDemoNotes(userId, filtered);

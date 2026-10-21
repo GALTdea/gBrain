@@ -1,6 +1,6 @@
 "use client";
 
-import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import LoginForm from "@/components/auth/LoginForm";
 import NotesDashboard from "@/components/dashboard/NotesDashboard";
 
@@ -27,15 +27,13 @@ function MainContent() {
 
 export default function Home() {
   return (
-    <AuthProvider>
-      <div className="min-h-screen flex flex-col justify-between">
-        <MainContent />
-        <footer className="footer footer-center p-4 text-xs text-[#64748B] border-t border-[#D8DEE9]">
-          <aside>
-            <p>Second Brain PWA • Gustavo & Gianna • Built on Next.js, Firebase & Vertex AI</p>
-          </aside>
-        </footer>
-      </div>
-    </AuthProvider>
+    <div className="min-h-screen flex flex-col justify-between">
+      <MainContent />
+      <footer className="footer footer-center p-4 text-xs text-[#64748B] border-t border-[#D8DEE9]">
+        <aside>
+          <p>Second Brain PWA • Gustavo & Gianna • Built on Next.js, Firebase & Vertex AI</p>
+        </aside>
+      </footer>
+    </div>
   );
 }

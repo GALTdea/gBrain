@@ -1,5 +1,11 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, Auth } from "firebase/auth";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  Auth,
+  setPersistence,
+  browserLocalPersistence,
+} from "firebase/auth";
 import {
   getFirestore,
   initializeFirestore,
@@ -34,6 +40,12 @@ if (isFirebaseConfigured) {
     const isExistingApp = getApps().length > 0;
     app = isExistingApp ? getApp() : initializeApp(firebaseConfig);
     auth = getAuth(app);
+
+    if (typeof window !== "undefined") {
+      setPersistence(auth, browserLocalPersistence).catch((err) => {
+        console.warn("Could not set auth persistence:", err);
+      });
+    }
 
     if (typeof window !== "undefined" && !isExistingApp) {
       try {

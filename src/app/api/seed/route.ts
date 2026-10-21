@@ -220,9 +220,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // If Firestore is available and not a mock demo user, write to Firestore
+    // If Firestore is available and userId is present, write to Firestore
     let persistedToFirestore = false;
-    if (!userId.startsWith("usr_")) {
+    if (userId) {
       try {
         const db = getAdminFirestore();
         const batch = db.batch();

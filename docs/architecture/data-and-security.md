@@ -53,8 +53,7 @@ Managed by [`src/lib/voice/voice-draft-store.ts`](file:///Users/gustavo/dev/proj
    * Appends a new `Blob` chunk every `1000ms` (`appendDraftChunk`) so long voice thoughts are crash-safe. Deleted automatically once `/api/voice` and `saveNote` succeed.
 
 ### B. `localStorage` Keys
-* `gbrain_cached_auth_user`: Cached `{ uid, email, displayName, photoURL }` hydrated synchronously by [`AuthContext.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/context/AuthContext.tsx#L26-L37) to prevent login screen flicker.
-* `gbrain_demo_notes_<userId>`: Used by [`notes-service.ts`](file:///Users/gustavo/dev/projects/gBrain/src/lib/notes/notes-service.ts#L13-L36) when running in demo/offline mode (`userId.startsWith("usr_")` or unconfigured Firebase).
+* `gbrain_demo_notes_<userId>`: Used by [`notes-service.ts`](file:///Users/gustavo/dev/projects/gBrain/src/lib/notes/notes-service.ts#L13-L36) as an offline safety fallback if Firebase is unconfigured or unreachable.
 
 ---
 
