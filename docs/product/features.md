@@ -62,4 +62,5 @@ Designed for high-certainty documentation (e.g. Gianna's union logs, timesheet p
 * **Server-Side Auth Token Verification on API Routes:** API routes (`/api/embed`, `/api/search`, `/api/voice`, `/api/seed`) currently accept `userId` in the JSON request body and sanitize path segments. Adding Firebase ID token (`Authorization: Bearer <token>`) verification via `firebase-admin` on the server would harden API security to match the client-side Firestore/Storage rules.
 * **Pinning & Archiving Notes:** Imported Keep notes tag pinned items with `#pinned`, but the Dashboard grid does not yet separate Pinned notes into a top section or support archiving.
 * **Image / File Attachments in Editor:** `storage.rules` currently scopes rules to `users/{userId}/audio/{fileName}`; expanding storage rules and TipTap extensions to support inline images/screenshots is a natural future stage.
+* **Brainstormed Roadmap Candidates:** See [`docs/product/potential-features.md`](./potential-features.md) for detailed analysis and evaluation matrices on Living Lists, Calendar Deep Links, In-Flight Context Pills, and Timesheet Synthesis.
 
