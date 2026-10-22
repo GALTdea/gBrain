@@ -131,62 +131,103 @@ function CaptureInner() {
     async function processSharedAudio() {
       try {
         setProcessingSharedAudio(true);
-        setSharedAudioStatus("Retrieving shared audio from Pixel Recorder...");
+        setSharedAudioStatus("Retrieving shared audio from cache...");
 
         const shared = await getSharedMediaPayload(shareIdParam);
         if (!shared || !shared.audioBlob) {
           throw new Error("Shared audio recording could not be retrieved from cache.");
         }
 
-        setSharedAudioStatus("Converting audio for Gemini multimodal analysis...");
-        const base64Data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(shared.audioBlob!);
-        });
-
         if (!user?.uid) {
           throw new Error("User session required to process shared audio.");
         }
 
-        setSharedAudioStatus("Synthesizing transcript and notes with Gemini 1.5 Flash...");
-        const clientTimeZone =
-          Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
-        const response = await fetch("/api/voice", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: user.uid,
-            audioBase64: base64Data,
-            mimeType: shared.audioType || "audio/m4a",
-            clientTimeZone,
-            sharedContext: {
-              title: shared.title,
-              text: shared.text,
-              url: shared.url,
-            },
-          }),
+        const timestamp = Date.now();
+        const noteId = `voice_${timestamp}_${Math.random().toString(36).substring(2, 7)}`;
+        const localAudioUrl = URL.createObjectURL(shared.audioBlob);
+        const timeString = new Date(timestamp).toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
         });
+        const placeholderTitle = shared.title
+          ? `Voice thought on "${shared.title}"`
+          : `Shared Audio Memo • ${timeString}`;
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || "Failed to process shared audio recording.");
-        }
+        const placeholderNote: Note = {
+          id: noteId,
+          title: placeholderTitle,
+          content: {
+            type: "doc",
+            content: [
+              {
+                type: "paragraph",
+                content: [
+                  {
+                    type: "text",
+                    text: "Transcribing and synthesizing note with Gemini...",
+                  },
+                ],
+              },
+            ],
+          },
+          plain_text: "Transcribing and synthesizing note with Gemini...",
+          tags: ["voice-memo", "share-target"],
+          status: "processing",
+          audioUrl: localAudioUrl,
+          userId: user.uid,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
 
-        const data = await response.json();
-        const createdNote: Note = data.note;
+        // Save placeholder immediately and free the user
+        await saveNote(user.uid, placeholderNote, placeholderNote.plain_text);
+        setSavedNote(placeholderNote);
+        setProcessingSharedAudio(false);
+        setSharedAudioStatus(null);
 
-        // Persist to user subcollection
-        await saveNote(user.uid, createdNote, createdNote.plain_text);
-        await deleteSharedMediaPayload(shareIdParam);
+        // Convert and process in background
+        (async () => {
+          try {
+            const base64Data = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(shared.audioBlob!);
+            });
 
-        setSavedNote(createdNote);
+            const clientTimeZone =
+              Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
+            const response = await fetch("/api/voice", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: user.uid,
+                noteId,
+                audioBase64: base64Data,
+                mimeType: shared.audioType || "audio/m4a",
+                clientTimeZone,
+                sharedContext: {
+                  title: shared.title,
+                  text: shared.text,
+                  url: shared.url,
+                },
+              }),
+              keepalive: true,
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              setSavedNote(data.note);
+            }
+            await deleteSharedMediaPayload(shareIdParam);
+          } catch (bgErr) {
+            console.error("Background shared audio synthesis error:", bgErr);
+          }
+        })();
       } catch (err: unknown) {
         console.error("Shared audio processing error:", err);
         const msg = err instanceof Error ? err.message : "Failed to process shared audio.";
         setError(msg);
-      } finally {
         setProcessingSharedAudio(false);
         setSharedAudioStatus(null);
       }
@@ -306,11 +347,16 @@ function CaptureInner() {
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl backdrop-blur">
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                {savedNote.audioUrl && (
+                {savedNote.status === "processing" ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0 animate-pulse">
+                    <span className="loading loading-spinner loading-xs text-amber-400"></span>
+                    Synthesizing in background...
+                  </span>
+                ) : savedNote.audioUrl ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-500/15 text-rose-300 border border-rose-500/30 shrink-0">
                     🎙️ Voice Memo
                   </span>
-                )}
+                ) : null}
                 {savedNote.tags?.includes("share-target") && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30 shrink-0">
                     🔗 Captured Link

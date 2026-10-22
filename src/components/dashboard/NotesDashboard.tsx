@@ -104,7 +104,11 @@ export default function NotesDashboard() {
   const [activeTab, setActiveTab] = useState<"notes" | "search">("notes");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [activeEditingNote, setActiveEditingNote] = useState<Note | null>(null);
+  const [activeEditingNoteId, setActiveEditingNoteId] = useState<string | null>(null);
+  const activeEditingNote = useMemo(
+    () => (activeEditingNoteId ? notes.find((n) => n.id === activeEditingNoteId) || null : null),
+    [notes, activeEditingNoteId]
+  );
   const [editorInitialText, setEditorInitialText] = useState<string>("");
   const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
   const [isSavingQuickNote, setIsSavingQuickNote] = useState<boolean>(false);
@@ -197,21 +201,60 @@ export default function NotesDashboard() {
   };
 
   const handleStartNewNote = (initialText?: string | React.MouseEvent) => {
-    setActiveEditingNote(null);
+    setActiveEditingNoteId(null);
     setEditorInitialText(typeof initialText === "string" ? initialText : "");
     setIsCreatingNew(true);
   };
 
   const handleOpenNote = (note: Note) => {
-    setActiveEditingNote(note);
+    setActiveEditingNoteId(note.id);
     setEditorInitialText("");
     setIsCreatingNew(false);
   };
 
   const handleCloseEditor = () => {
-    setActiveEditingNote(null);
+    setActiveEditingNoteId(null);
     setEditorInitialText("");
     setIsCreatingNew(false);
+  };
+
+  const handleRetrySynthesis = async (note: Note) => {
+    if (!user?.uid || !note.audioUrl) return;
+
+    try {
+      await saveNote(user.uid, {
+        ...note,
+        status: "processing",
+        processingError: undefined,
+      });
+
+      const clientTimeZone =
+        Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
+      const response = await fetch("/api/voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.uid,
+          noteId: note.id,
+          audioUrl: note.audioUrl,
+          audioStorageUri: note.audioStorageUri,
+          clientTimeZone,
+        }),
+        keepalive: true,
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Retry synthesis failed");
+      }
+    } catch (err) {
+      console.error("Retry synthesis error:", err);
+      await saveNote(user.uid, {
+        ...note,
+        status: "failed",
+        processingError: err instanceof Error ? err.message : "Retry failed",
+      });
+    }
   };
 
   const saveQuickNote = async (rawText: string) => {
@@ -376,14 +419,13 @@ export default function NotesDashboard() {
       {(isCreatingNew || activeEditingNote) && (
         <section className="animate-in fade-in duration-200">
           <TipTapEditor
+            key={activeEditingNote ? `${activeEditingNote.id}_${activeEditingNote.status}` : "new_note"}
             initialNote={activeEditingNote}
             initialText={editorInitialText}
             userId={user?.uid || ""}
             onClose={handleCloseEditor}
             onSaveSuccess={(saved) => {
-              if (activeEditingNote?.id === saved.id) {
-                setActiveEditingNote(saved);
-              }
+              setActiveEditingNoteId(saved.id);
             }}
           />
         </section>
@@ -686,15 +728,36 @@ export default function NotesDashboard() {
                         <div className="p-5 space-y-3">
                           {/* Note Title & Delete Action */}
                           <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                              {isVoice && (
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
+                              {note.status === "processing" ? (
+                                <span
+                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-700/20 animate-pulse shrink-0"
+                                  title="Transcribing and synthesizing note with Gemini in the background..."
+                                >
+                                  <span className="loading loading-spinner loading-xs text-amber-600"></span>
+                                  Synthesizing...
+                                </span>
+                              ) : note.status === "failed" ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRetrySynthesis(note);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-rose-50 text-rose-700 ring-1 ring-rose-700/20 hover:bg-rose-100 transition-colors shrink-0"
+                                  title={note.processingError || "Synthesis failed. Click to retry."}
+                                >
+                                  <span>⚠️ Failed</span>
+                                  <span className="underline ml-0.5 font-bold">Retry</span>
+                                </button>
+                              ) : isVoice ? (
                                 <span
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-pink-50 text-pink-700 ring-1 ring-pink-700/10 shrink-0"
                                   title="Voice Note"
                                 >
                                   🎙️ Voice
                                 </span>
-                              )}
+                              ) : null}
                               <h4 className="font-bold text-base text-[#2E3440] truncate group-hover:text-[#5E81AC] transition-colors">
                                 {note.title}
                               </h4>
@@ -726,8 +789,16 @@ export default function NotesDashboard() {
                             </div>
                           )}
 
-                          {/* Note Content: AI Summary & Collapsible Transcript for Voice, Plain text snippet for regular notes */}
-                          {isVoice ? (
+                          {/* Note Content: Processing skeleton / AI Summary & Transcript for Voice / Plain text snippet */}
+                          {note.status === "processing" ? (
+                            <div className="space-y-2 py-1">
+                              <div className="h-3 bg-amber-100/60 rounded animate-pulse w-5/6"></div>
+                              <div className="h-3 bg-slate-100 rounded animate-pulse w-3/4"></div>
+                              <p className="text-[11px] text-amber-700/80 font-medium italic flex items-center gap-1 pt-1">
+                                <span>✨ Gemini 1.5 Flash is transcribing & organizing in background...</span>
+                              </p>
+                            </div>
+                          ) : isVoice ? (
                             <div className="space-y-2.5">
                               {summary && (
                                 <div className="space-y-1">

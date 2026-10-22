@@ -386,13 +386,13 @@ export default function VoiceRecorder({
 
     setIsRecording(false);
     setIsProcessing(true);
-    setStatusMessage("Finalizing voice recording...");
+    setStatusMessage("Saving voice memo...");
 
     const recorder = mediaRecorderRef.current;
     const draftId = currentDraftIdRef.current;
 
     recorder.onstop = async () => {
-      // Release microphone tracks
+      // Release microphone tracks immediately
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -411,104 +411,165 @@ export default function VoiceRecorder({
 
         const userId = user?.uid || "guest_user";
         const timestamp = Date.now();
+        const noteId =
+          targetNoteId ||
+          draftId ||
+          `voice_${timestamp}_${Math.random().toString(36).substring(2, 7)}`;
         const fileName = `voice_${timestamp}.${extension}`;
         const storagePath = `users/${userId}/audio/${fileName}`;
 
-        let downloadUrl = "";
-        let audioStorageUri = "";
+        // Create instant local playback URL for immediate UI responsiveness
+        const localAudioUrl = URL.createObjectURL(audioBlob);
 
-        // Attempt upload to Firebase Storage if configured (with a 4s timeout so local dev doesn't hang)
-        if (storage && isFirebaseConfigured && user) {
-          try {
-            setStatusMessage("Uploading audio to Firebase Storage...");
-            const audioRef = ref(storage, storagePath);
-            const uploadTask = (async () => {
-              const uploadResult = await uploadBytes(audioRef, audioBlob, {
-                contentType: effectiveMimeType,
-              });
-              return await getDownloadURL(uploadResult.ref);
-            })();
-            const timeoutTask = new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error("Firebase Storage upload timed out")), 4000)
-            );
-            downloadUrl = await Promise.race([uploadTask, timeoutTask]);
-
-            const bucketName =
-              process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
-              storage.app.options.storageBucket ||
-              "";
-            if (bucketName) {
-              audioStorageUri = `gs://${bucketName}/${storagePath}`;
-            }
-          } catch (uploadErr) {
-            console.warn(
-              "Firebase Storage upload deferred (falling back to direct audio analysis):",
-              uploadErr
-            );
-          }
-        }
-
-        // Convert audio blob to base64 for fallback or direct inline analysis
-        setStatusMessage("Converting audio for Gemini multimodal analysis...");
-        const base64Data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(audioBlob);
+        const timeString = new Date(timestamp).toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
         });
+        const placeholderTitle = sharedContext?.title
+          ? `Voice thought on "${sharedContext.title}"`
+          : `Voice Memo • ${timeString}`;
 
-        // Trigger /api/voice route for multimodal transcription and indexing
-        setStatusMessage("Transcribing & synthesizing note with Gemini...");
-        const clientTimeZone =
-          Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
-        const response = await fetch("/api/voice", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId,
-            audioStorageUri: audioStorageUri || undefined,
-            audioUrl: downloadUrl || undefined,
-            audioBase64: base64Data,
-            mimeType: effectiveMimeType,
-            clientTimeZone,
-            targetNoteId,
-            sharedContext,
-          }),
-        });
+        const placeholderNote: Note = {
+          id: noteId,
+          title: placeholderTitle,
+          content: {
+            type: "doc",
+            content: [
+              {
+                type: "paragraph",
+                content: [
+                  {
+                    type: "text",
+                    text: "Transcribing and synthesizing note with Gemini...",
+                  },
+                ],
+              },
+            ],
+          },
+          plain_text: "Transcribing and synthesizing note with Gemini...",
+          tags: ["voice-memo"],
+          status: "processing",
+          audioUrl: localAudioUrl,
+          userId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || "Multimodal voice processing failed.");
-        }
+        // 1. Instantly persist placeholder note into Firestore subcollection
+        await saveNote(userId, placeholderNote, placeholderNote.plain_text);
 
-        const data = await response.json();
-        const createdNote: Note = data.note;
-
-        // Persist via client-side saveNote to ensure Firestore subcollection write with client auth
-        await saveNote(userId, createdNote, createdNote.plain_text);
-
-        // Delete successful draft from IndexedDB
-        if (draftId) {
-          await deleteVoiceDraft(draftId);
-        }
-
+        // 2. Immediate user confirmation & release UI (< 500ms total)
         triggerHaptic(60);
-        setStatusMessage(
-          targetNoteId
-            ? "Voice thought appended successfully!"
-            : "Voice memo synthesized & saved!"
-        );
-        setTimeout(() => setStatusMessage(null), 3000);
-
         if (onNoteCreated) {
-          onNoteCreated(createdNote);
+          onNoteCreated(placeholderNote);
         }
+
+        // Clean up recorder controls and dismiss UI immediately
+        setIsProcessing(false);
+        setStatusMessage(null);
+        setRecordSeconds(0);
+        setAudioLevel(0);
+        audioChunksRef.current = [];
+        currentDraftIdRef.current = null;
+
+        // 3. Asynchronous decoupled background synthesis
+        (async () => {
+          let downloadUrl = localAudioUrl;
+          let audioStorageUri = "";
+
+          try {
+            // Upload audio to Firebase Storage if configured
+            if (storage && isFirebaseConfigured && user) {
+              try {
+                const audioRef = ref(storage, storagePath);
+                const uploadResult = await uploadBytes(audioRef, audioBlob, {
+                  contentType: effectiveMimeType,
+                });
+                downloadUrl = await getDownloadURL(uploadResult.ref);
+
+                const bucketName =
+                  process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
+                  storage.app.options.storageBucket ||
+                  "";
+                if (bucketName) {
+                  audioStorageUri = `gs://${bucketName}/${storagePath}`;
+                }
+
+                // Update placeholder note with permanent Firebase Storage URL
+                await saveNote(userId, {
+                  ...placeholderNote,
+                  audioUrl: downloadUrl,
+                  audioStorageUri: audioStorageUri || undefined,
+                });
+              } catch (uploadErr) {
+                console.warn(
+                  "[VoiceRecorder] Storage upload deferred, proceeding with base64:",
+                  uploadErr
+                );
+              }
+            }
+
+            // Convert audio blob to base64 for direct multimodal synthesis
+            const base64Data = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(audioBlob);
+            });
+
+            const clientTimeZone =
+              Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
+
+            const response = await fetch("/api/voice", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId,
+                noteId,
+                audioStorageUri: audioStorageUri || undefined,
+                audioUrl: downloadUrl,
+                audioBase64: base64Data,
+                mimeType: effectiveMimeType,
+                clientTimeZone,
+                targetNoteId,
+                sharedContext,
+              }),
+              keepalive: true,
+            });
+
+            if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              throw new Error(errData.error || "Multimodal voice processing failed.");
+            }
+
+            const data = await response.json();
+            const completedNote: Note = data.note;
+
+            // Update local fallback store if Firebase client is unconfigured
+            if (!isFirebaseConfigured) {
+              await saveNote(userId, completedNote, completedNote.plain_text);
+            }
+
+            // Clean up IndexedDB draft upon verified synthesis
+            if (draftId) {
+              await deleteVoiceDraft(draftId);
+            }
+          } catch (bgErr: unknown) {
+            console.error("[VoiceRecorder] Background synthesis error:", bgErr);
+            const errMsg =
+              bgErr instanceof Error ? bgErr.message : "Failed to synthesize voice memo";
+            await saveNote(userId, {
+              ...placeholderNote,
+              status: "failed",
+              processingError: errMsg,
+            }).catch(() => {});
+          }
+        })();
       } catch (err: unknown) {
         console.error("Voice processing error:", err);
         const msg =
           err instanceof Error ? err.message : "Failed to process audio memo.";
         setErrorMessage(msg);
-      } finally {
         setIsProcessing(false);
         setRecordSeconds(0);
         setAudioLevel(0);

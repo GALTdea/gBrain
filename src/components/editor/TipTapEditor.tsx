@@ -249,6 +249,25 @@ export default function TipTapEditor({
         </div>
       </div>
 
+      {/* Voice Processing / Failed Status Banners */}
+      {initialNote?.status === "processing" && (
+        <div className="mx-6 mt-3 bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-800 flex items-center gap-2.5 animate-pulse">
+          <span className="loading loading-spinner loading-xs text-amber-600 shrink-0"></span>
+          <div>
+            <span className="font-semibold">Gemini is transcribing & synthesizing this voice memo in the background.</span>
+            <p className="text-[11px] text-amber-700/80 pt-0.5">The transcript, summary, and tags will automatically appear once processing is complete.</p>
+          </div>
+        </div>
+      )}
+      {initialNote?.status === "failed" && (
+        <div className="mx-6 mt-3 bg-rose-50 border border-rose-200/80 rounded-xl p-3 text-xs text-rose-800 flex items-center justify-between gap-2.5">
+          <div>
+            <span className="font-semibold">Voice memo synthesis failed.</span>
+            <p className="text-[11px] text-rose-700/80 pt-0.5">{initialNote.processingError || "Audio recording is preserved."}</p>
+          </div>
+        </div>
+      )}
+
       {/* Note Title Input */}
       <div className="px-6 pt-5 pb-2">
         <input

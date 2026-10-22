@@ -70,50 +70,53 @@ sequenceDiagram
 ## 3. Universal Capture & Multimodal Voice Pipeline
 
 ```mermaid
-flowchart LR
-    subgraph ShareSheet ["Android / OS Share Sheet"]
-        OS["Share Link, Text, or Audio File"]
+sequenceDiagram
+    autonumber
+    actor User as User (Mobile / Desktop)
+    participant UI as VoiceRecorder / /capture
+    participant FS as Firestore (users/{uid}/notes)
+    participant Storage as Firebase Storage (audio/)
+    participant API as Voice Backend (/api/voice)
+    participant Gemini as Gemini 1.5 Flash & Vertex AI
+
+    User->>UI: Tap "Stop Recording"
+    UI->>FS: ⚡ 1. Save Placeholder Note (status: "processing", audioUrl)
+    UI-->>User: ⚡ 2. Instant Haptic Buzz & Dismiss Modal (< 500ms)
+    
+    Note over User,UI: User is back on Dashboard or phone is locked!
+
+    par Decoupled Background Thread
+        UI->>Storage: Upload audio file
+        UI->>FS: Update Note with storage audioUrl
+        UI-)API: POST /api/voice (keepalive: true)
+        API->>Gemini: Multimodal Analysis (Title, Summary, Transcript, Tags)
+        Gemini-->>API: Structured JSON Output
+        API->>Gemini: Generate 768-dim Text Embedding
+        Gemini-->>API: Float vector[768]
+        API->>FS: Update Note (status: "ready", content, summary, tags, embedding)
     end
 
-    subgraph Ingestion ["PWA Ingestion Layer"]
-        SW["Service Worker (public/sw.js)\nPOST /capture-share-target"]
-        IDB[("IndexedDB\nshared_media")]
-        RouteFallback["Next.js Route Fallback\n/capture-share-target"]
-    end
-
-    subgraph CapturePage ["/capture Client Page"]
-        AutoSave["Immediate Link/Text Save"]
-        AppendVoice["Optional 1-Tap Voice Append"]
-        AudioIngest["Shared Audio Processor"]
-    end
-
-    subgraph VoiceEngine ["Multimodal Voice Engine (/api/voice)"]
-        GeminiAudio["processMultimodalVoiceMemo\n(Title, Summary, Transcript, Tags)"]
-        TipTapFormat["formatVoiceTipTapDoc"]
-        EmbedNote["generateTextEmbedding (768-dim)"]
-    end
-
-    OS --> SW
-    SW -->|Stores Blob/Text| IDB
-    SW -->|303 Redirect ?shareId=...| CapturePage
-    OS -.->|If SW inactive| RouteFallback
-    RouteFallback -->|303 Redirect ?title=&url=| CapturePage
-
-    CapturePage --> AutoSave
-    AutoSave --> AppendVoice
-    AppendVoice -->|targetNoteId + sharedContext| VoiceEngine
-    IDB --> AudioIngest
-    AudioIngest --> VoiceEngine
-    VoiceEngine --> GeminiAudio --> TipTapFormat --> EmbedNote
+    FS-->>UI: Real-time onSnapshot event
+    Note over UI: Card smoothly transitions from "Synthesizing..." to ready!
 ```
 
-### A. Web Share Target Flow
+### A. Sub-500ms Optimistic Capture Architecture
+To eliminate mobile friction (where users previously waited 10–15s for Gemini synthesis while holding the screen on):
+1. **Immediate Local Stash:** When recording stops, [`VoiceRecorder.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/components/voice/VoiceRecorder.tsx) creates a local `Blob` URL and instantly saves a placeholder `Note` document with `status: "processing"`.
+2. **Instant UI Release:** The recording modal is dismissed in **< 500ms** with haptic feedback, returning the user to their dashboard immediately.
+3. **Audio Playback:** The placeholder card on the dashboard renders the HTML5 audio player immediately, allowing users to listen to their voice memo while synthesis runs.
+4. **Decoupled Background Dispatch:** In a non-blocking background thread (`keepalive: true`), the audio is uploaded to Firebase Storage and dispatched to `POST /api/voice`.
+5. **Real-Time In-Place Update:** When `POST /api/voice` completes, it updates the document in `users/{userId}/notes/{noteId}` to `status: "ready"`. The client's Firestore `onSnapshot` listener automatically transforms the card from its skeleton state to the fully titled, summarized, and tagged note without requiring a page reload.
+6. **Fault Tolerance:** If synthesis fails, the document updates to `status: "failed"` with `processingError`, preserving the raw audio and showing a 1-tap "Retry" button.
+
+### B. Web Share Target Flow
 1. [`public/manifest.json`](file:///Users/gustavo/dev/projects/gBrain/public/manifest.json#L24-L39) registers `/capture-share-target` (`POST`, `multipart/form-data`) accepting `title`, `text`, `url`, and `audio` files (`audio/*`, `.m4a`, `.mp3`, `.wav`, `.aac`, `.webm`, `.ogg`).
 2. [`public/sw.js`](file:///Users/gustavo/dev/projects/gBrain/public/sw.js#L55-L99) intercepts the `POST`, writes the payload (including any binary `audioBlob`) to IndexedDB (`shared_media`), and issues a `303 See Other` redirect to `/capture?shareId=...&audioShared=1`.
-3. If only a link or text was shared, [`/capture/page.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/app/capture/page.tsx#L187-L200) immediately saves the note upon verifying the user's session, then offers a 1-tap **"Add Spoken Thought to this Note"** button.
-4. If the user records a spoken thought for that shared link, `VoiceRecorder` passes `targetNoteId={savedNote.id}` and `sharedContext={{ title, url, text }}` to `/api/voice`, overwriting the quick-captured link note with a rich multimodal note that links the original URL, audio recording, AI summary, and full transcript.
+3. If an audio file was shared (e.g., from Pixel Recorder), [`/capture/page.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/app/capture/page.tsx) immediately saves a placeholder note with `status: "processing"`, confirms to the user, and triggers background synthesis without blocking the UI.
+4. If only a link or text was shared, `/capture/page.tsx` immediately saves the note upon verifying the user's session, then offers a 1-tap **"Add Spoken Thought to this Note"** button.
+5. If the user records a spoken thought for that shared link, `VoiceRecorder` passes `targetNoteId={savedNote.id}` and `sharedContext={{ title, url, text }}` to `/api/voice`, updating the quick-captured link note with rich multimodal intelligence.
 
-### B. Multimodal Voice Processing (`processMultimodalVoiceMemo`)
+### C. Multimodal Voice Processing (`processMultimodalVoiceMemo`)
 Implemented in [`src/lib/firebase/admin.ts`](file:///Users/gustavo/dev/projects/gBrain/src/lib/firebase/admin.ts#L473-L674):
 1. Normalizes browser MIME strings (e.g., stripping `;codecs=opus` via `normalizeAudioMimeType`) and extracts clean base64 data.
 2. Sends the audio inline (`inlineData`) along with any `sharedContext` (referenced URL/title/snippet) to Gemini (`responseMimeType: "application/json"`, `temperature: 0.2`).
@@ -122,4 +125,5 @@ Implemented in [`src/lib/firebase/admin.ts`](file:///Users/gustavo/dev/projects/
    * **Strategy 1:** `@google/genai` client across `CANDIDATE_GEMINI_MODELS`.
    * **Strategy 2:** `@google-cloud/vertexai` SDK (`gemini-2.5-flash`, `gemini-1.5-flash`, `gemini-2.0-flash-001`).
    * **Strategy 3:** Browser `SpeechRecognition` transcript synthesis or timezone-aware (`America/Los_Angeles`) timestamped fallback so a user's recording is never lost.
+
 

@@ -35,9 +35,12 @@ This document catalogs the currently implemented features in `gBrain`, where the
 * **Post-Capture Voice Append:** After auto-saving a shared link or text snippet on [`src/app/capture/page.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/app/capture/page.tsx), the user can tap **"Add Spoken Thought to this Note"** to record audio commentary that merges with the shared link context.
 
 ### Multimodal Voice Intelligence
+* **Sub-500ms Optimistic Voice Capture:** Tapping "Stop Recording" in [`VoiceRecorder.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/components/voice/VoiceRecorder.tsx) or sharing audio files in [`/capture`](file:///Users/gustavo/dev/projects/gBrain/src/app/capture/page.tsx) immediately writes a placeholder note with `status: "processing"` and dismisses the UI with haptic feedback in **< 500ms**, ending the 10–15s mobile spinner freeze.
+* **Instant Audio Playback:** The placeholder note card on the dashboard renders an active HTML5 audio player immediately so recordings can be reviewed without waiting for transcription.
+* **Real-Time In-Place Synthesis:** Decoupled background thread executes Gemini multimodal transcription, summarization, tagging, and 768-dim vector embedding via [`/api/voice`](file:///Users/gustavo/dev/projects/gBrain/src/app/api/voice/route.ts). As soon as the backend updates the Firestore document (`status: "ready"`), the card smoothly transforms on the user's dashboard via `onSnapshot` without a page refresh.
+* **Fault-Tolerant Retry:** If synthesis fails due to network dropouts or quota limits, the note is marked `status: "failed"` with `processingError`, preserving the original audio file and rendering a 1-tap "Retry" button.
 * **Crash-Safe Recording:** [`VoiceRecorder.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/components/voice/VoiceRecorder.tsx) and [`voice-draft-store.ts`](file:///Users/gustavo/dev/projects/gBrain/src/lib/voice/voice-draft-store.ts) flush 1-second `MediaRecorder` blobs to IndexedDB (`voice_drafts`) and hold a screen WakeLock.
 * **Cross-Platform MIME Normalization:** Automatically selects the best supported recording format (`audio/webm;codecs=opus`, `audio/mp4`, `audio/aac`, `audio/ogg`) and normalizes MIME headers before calling Gemini so codec strings never cause `400` errors.
-* **Multimodal Synthesis (`/api/voice`):** Uses Gemini (`processMultimodalVoiceMemo`) to generate structured JSON (`title`, `summary`, `transcript`, `tags`), formats a rich TipTap document with links to the audio file and any referenced URL, and embeds the combined text.
 
 ### Conversational RAG Search (Exploratory Retrieval)
 * **Hybrid Retrieval Pipeline (`/api/search`, aliased at `/api/rag` & `/api/chat`):**

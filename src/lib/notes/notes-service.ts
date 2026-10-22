@@ -91,6 +91,8 @@ export function subscribeToUserNotes(
             embedding: data.embedding || undefined,
             audioUrl: data.audioUrl || undefined,
             audioStorageUri: data.audioStorageUri || undefined,
+            status: data.status || "ready",
+            processingError: data.processingError || undefined,
             userId: data.userId || userId,
             createdAt: data.createdAt || Date.now(),
             updatedAt: data.updatedAt || Date.now(),
@@ -130,6 +132,8 @@ export async function saveNote(
     embedding?: number[];
     audioUrl?: string;
     audioStorageUri?: string;
+    status?: Note["status"];
+    processingError?: string;
   },
   previousPlainText?: string
 ): Promise<Note> {
@@ -147,13 +151,16 @@ export async function saveNote(
     ...(note.embedding !== undefined ? { embedding: note.embedding } : {}),
     ...(note.audioUrl !== undefined ? { audioUrl: note.audioUrl } : {}),
     ...(note.audioStorageUri !== undefined ? { audioStorageUri: note.audioStorageUri } : {}),
+    status: note.status || "ready",
+    ...(note.processingError ? { processingError: note.processingError } : {}),
     userId,
     createdAt: note.createdAt || now,
     updatedAt: now,
   };
 
   const plainTextChanged =
-    previousPlainText === undefined || previousPlainText !== note.plain_text || !note.embedding;
+    note.status !== "processing" &&
+    (previousPlainText === undefined || previousPlainText !== note.plain_text || !note.embedding);
 
   // Asynchronously trigger 768-dim embedding generation when created or plain_text changed
   if (note.plain_text && plainTextChanged && typeof window !== "undefined") {
