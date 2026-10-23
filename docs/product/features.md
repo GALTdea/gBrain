@@ -24,8 +24,15 @@ This document catalogs the currently implemented features in `gBrain`, where the
 * **Debounced Auto-Save (800ms):** Tracks `saved`, `saving`, `unsaved`, and `error` states, flushing pending changes automatically when navigating back to the dashboard.
 * **Tag Management:** Inline tag addition (`Enter`) and removal with automatic `#` normalization.
 
-### Frictionless Capture & PWA (`manifest.json`, `sw.js`, `/capture`)
+### Frictionless Capture & PWA (`manifest.json`, `sw.js`, `/capture`, `OfflineIndicator`)
 * **Installable Standalone PWA:** Configured in [`public/manifest.json`](file:///Users/gustavo/dev/projects/gBrain/public/manifest.json) with light "Nord Snow" palette (`#ECEFF4` / `#5E81AC`), maskable icons, and app shortcuts.
+* **Offline-First App Shell & Service Worker ([`public/sw.js`](file:///Users/gustavo/dev/projects/gBrain/public/sw.js)):**
+  * Precaches `/dashboard`, `/capture`, `/manifest.json`, and SVG icons on install.
+  * Employs Network-First with Cache Fallback for navigation (`mode === "navigate"`), preventing browser offline error pages in dead zones.
+  * Uses Stale-While-Revalidate / Cache-First for static assets (`/_next/static/`), scripts, styles, and RSC payloads.
+  * Intercepts `/api/*` when offline, returning clean 503 JSON indicators.
+* **Live Connection State Feedback ([`src/components/pwa/OfflineIndicator.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/components/pwa/OfflineIndicator.tsx)):** Floating status pill alerting when offline ("Edits saved locally") and confirming reconnection ("Back Online • Synced").
+* **Offline Voice Memo Queue:** If a voice memo is recorded without internet reception, the audio is stashed safely in IndexedDB, the note is assigned `status: "queued"`, and synthesis automatically triggers upon reconnection via `window.addEventListener("online")`.
 * **Edge-to-Edge Mobile Layout:** Full-height `min-h-dvh` layout in a dark palette (`bg-slate-950 text-slate-100`) tailored for Android Chrome/PWA share target sessions with thumb-zone touch targets.
 * **Thumb-Zone Voice Recording State:** Displays a large `text-5xl font-mono` live timer, an active pulsing recording badge, a full-width real-time Web Audio API waveform canvas, a massive high-contrast 56px `Done & Save` button anchored at the bottom, and a subtle `Cancel` option.
 * **Polished Confirmation Cards:** Success banner with AI-generated title, extracted summary, tag pills in styled `bg-slate-900/80 border border-slate-800` cards, and anchored navigation buttons (`Return to Dashboard`, `Capture Another`).

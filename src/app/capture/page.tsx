@@ -352,6 +352,10 @@ function CaptureInner() {
                     <span className="loading loading-spinner loading-xs text-amber-400"></span>
                     Synthesizing in background...
                   </span>
+                ) : savedNote.status === "queued" ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                    <span>⏳ Saved Offline (Queued)</span>
+                  </span>
                 ) : savedNote.audioUrl ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-500/15 text-rose-300 border border-rose-500/30 shrink-0">
                     🎙️ Voice Memo

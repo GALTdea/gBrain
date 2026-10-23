@@ -556,11 +556,20 @@ export default function VoiceRecorder({
             }
           } catch (bgErr: unknown) {
             console.error("[VoiceRecorder] Background synthesis error:", bgErr);
-            const errMsg =
-              bgErr instanceof Error ? bgErr.message : "Failed to synthesize voice memo";
+            const isOffline =
+              (typeof navigator !== "undefined" && !navigator.onLine) ||
+              (bgErr instanceof TypeError && bgErr.message.toLowerCase().includes("fetch")) ||
+              (bgErr instanceof Error && bgErr.message.toLowerCase().includes("offline"));
+
+            const errMsg = isOffline
+              ? "Offline • Audio saved locally. Ready to synthesize when connected."
+              : bgErr instanceof Error
+              ? bgErr.message
+              : "Failed to synthesize voice memo";
+
             await saveNote(userId, {
               ...placeholderNote,
-              status: "failed",
+              status: isOffline ? "queued" : "failed",
               processingError: errMsg,
             }).catch(() => {});
           }

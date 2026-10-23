@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 };
 
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
+import OfflineIndicator from "@/components/pwa/OfflineIndicator";
 import { AuthProvider } from "@/context/AuthContext";
 
 export default function RootLayout({
@@ -27,6 +28,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ServiceWorkerRegister />
+        <OfflineIndicator />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

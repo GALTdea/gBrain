@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { Note } from "@/types/note";
@@ -163,6 +163,61 @@ export default function NotesDashboard() {
     return () => unsubscribe();
   }, [user?.uid]);
 
+  const handleRetrySynthesis = useCallback(
+    async (note: Note) => {
+      if (!user?.uid || !note.audioUrl) return;
+
+      try {
+        await saveNote(user.uid, {
+          ...note,
+          status: "processing",
+          processingError: undefined,
+        });
+
+        const clientTimeZone =
+          Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
+        const response = await fetch("/api/voice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.uid,
+            noteId: note.id,
+            audioUrl: note.audioUrl,
+            audioStorageUri: note.audioStorageUri,
+            clientTimeZone,
+          }),
+          keepalive: true,
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || "Retry synthesis failed");
+        }
+      } catch (err) {
+        console.error("Retry synthesis error:", err);
+        await saveNote(user.uid, {
+          ...note,
+          status: "failed",
+          processingError: err instanceof Error ? err.message : "Retry failed",
+        });
+      }
+    },
+    [user]
+  );
+
+  // Auto-retry queued offline notes when connection is restored
+  useEffect(() => {
+    const handleOnline = () => {
+      const queuedNotes = notes.filter((n) => n.status === "queued");
+      queuedNotes.forEach((n) => {
+        handleRetrySynthesis(n);
+      });
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [notes, handleRetrySynthesis]);
+
   // Aggregate all unique tags across notes for filtering
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -216,45 +271,6 @@ export default function NotesDashboard() {
     setActiveEditingNoteId(null);
     setEditorInitialText("");
     setIsCreatingNew(false);
-  };
-
-  const handleRetrySynthesis = async (note: Note) => {
-    if (!user?.uid || !note.audioUrl) return;
-
-    try {
-      await saveNote(user.uid, {
-        ...note,
-        status: "processing",
-        processingError: undefined,
-      });
-
-      const clientTimeZone =
-        Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
-      const response = await fetch("/api/voice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.uid,
-          noteId: note.id,
-          audioUrl: note.audioUrl,
-          audioStorageUri: note.audioStorageUri,
-          clientTimeZone,
-        }),
-        keepalive: true,
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Retry synthesis failed");
-      }
-    } catch (err) {
-      console.error("Retry synthesis error:", err);
-      await saveNote(user.uid, {
-        ...note,
-        status: "failed",
-        processingError: err instanceof Error ? err.message : "Retry failed",
-      });
-    }
   };
 
   const saveQuickNote = async (rawText: string) => {
@@ -737,6 +753,19 @@ export default function NotesDashboard() {
                                   <span className="loading loading-spinner loading-xs text-amber-600"></span>
                                   Synthesizing...
                                 </span>
+                              ) : note.status === "queued" ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRetrySynthesis(note);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-800 ring-1 ring-amber-800/20 hover:bg-amber-100 transition-colors shrink-0"
+                                  title={note.processingError || "Saved offline. Click to synthesize when reconnected."}
+                                >
+                                  <span>⏳ Offline</span>
+                                  <span className="underline ml-0.5 font-bold">Sync</span>
+                                </button>
                               ) : note.status === "failed" ? (
                                 <button
                                   type="button"
@@ -796,6 +825,16 @@ export default function NotesDashboard() {
                               <div className="h-3 bg-slate-100 rounded animate-pulse w-3/4"></div>
                               <p className="text-[11px] text-amber-700/80 font-medium italic flex items-center gap-1 pt-1">
                                 <span>✨ Gemini 1.5 Flash is transcribing & organizing in background...</span>
+                              </p>
+                            </div>
+                          ) : note.status === "queued" ? (
+                            <div className="space-y-1.5 py-1">
+                              <p className="text-xs text-[#4C566A] flex items-center gap-1.5 font-medium">
+                                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                                <span>Audio saved offline</span>
+                              </p>
+                              <p className="text-[11px] text-[#64748B]">
+                                Queued for Gemini synthesis once reconnected.
                               </p>
                             </div>
                           ) : isVoice ? (

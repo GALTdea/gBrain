@@ -126,4 +126,20 @@ Implemented in [`src/lib/firebase/admin.ts`](file:///Users/gustavo/dev/projects/
    * **Strategy 2:** `@google-cloud/vertexai` SDK (`gemini-2.5-flash`, `gemini-1.5-flash`, `gemini-2.0-flash-001`).
    * **Strategy 3:** Browser `SpeechRecognition` transcript synthesis or timezone-aware (`America/Los_Angeles`) timestamped fallback so a user's recording is never lost.
 
+### D. Offline Resilience & Service Worker Caching
+Implemented to guarantee full offline functionality in network dead zones:
+1. **Service Worker Pre-caching & Routing ([`public/sw.js`](file:///Users/gustavo/dev/projects/gBrain/public/sw.js)):**
+   * **Pre-caching on Install:** Core application shells (`/dashboard`, `/capture`), manifest (`/manifest.json`), and SVG icons are cached immediately on install with `self.skipWaiting()`.
+   * **Cache Cleanup on Activate:** Old cache versions (`gbrain-v1`) are deleted and active clients claimed.
+   * **Navigation Routing (`mode === "navigate"`):** Network-first with automatic cache fallback. If no internet reception is available, the cached dashboard/capture shell is returned seamlessly, completely preventing native browser offline dinosaur/error screens.
+   * **Static Asset & RSC Strategy:** Stale-While-Revalidate / Cache-First for Next.js chunks (`/_next/static/`), CSS, TipTap editor bundles, SVGs, and RSC payloads.
+   * **API Call Fallback:** Network-first with structured 503 JSON responses (`{ error: "offline" }`) for backend `/api/*` endpoints.
+2. **Offline Note Persistence:**
+   * Text notes and edits are saved directly to Firestore's client-side [`persistentLocalCache`](file:///Users/gustavo/dev/projects/gBrain/src/lib/firebase/client.ts#L52-L56) (`persistentMultipleTabManager`), queuing automatic synchronization to GCP once reception is restored.
+3. **Offline Voice Memo Queue:**
+   * In [`VoiceRecorder.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/components/voice/VoiceRecorder.tsx), if audio is recorded without reception, the audio chunks remain safely stashed in IndexedDB (`voice_drafts`) and the note is marked with `status: "queued"`.
+   * The dashboard displays an `⏳ Offline` badge with a 1-tap manual sync button, and automatically triggers background synthesis via `window.addEventListener("online")` as soon as internet connectivity returns.
+4. **Visual Connection State Feedback:**
+   * [`src/components/pwa/OfflineIndicator.tsx`](file:///Users/gustavo/dev/projects/gBrain/src/components/pwa/OfflineIndicator.tsx) uses `useSyncExternalStore` to track `navigator.onLine`, presenting a non-intrusive status pill when offline and confirming with a green *"Back Online • Synced"* indicator upon reconnection.
+
 

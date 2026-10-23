@@ -259,6 +259,15 @@ export default function TipTapEditor({
           </div>
         </div>
       )}
+      {initialNote?.status === "queued" && (
+        <div className="mx-6 mt-3 bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-800 flex items-center gap-2.5">
+          <span className="text-base shrink-0">⏳</span>
+          <div>
+            <span className="font-semibold">Voice memo saved offline.</span>
+            <p className="text-[11px] text-amber-700/80 pt-0.5">{initialNote.processingError || "Audio is preserved locally. It will automatically synthesize with Gemini once reconnected."}</p>
+          </div>
+        </div>
+      )}
       {initialNote?.status === "failed" && (
         <div className="mx-6 mt-3 bg-rose-50 border border-rose-200/80 rounded-xl p-3 text-xs text-rose-800 flex items-center justify-between gap-2.5">
           <div>
