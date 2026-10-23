@@ -534,7 +534,6 @@ export default function VoiceRecorder({
                 targetNoteId,
                 sharedContext,
               }),
-              keepalive: true,
             });
 
             if (!response.ok) {
@@ -558,7 +557,6 @@ export default function VoiceRecorder({
             console.error("[VoiceRecorder] Background synthesis error:", bgErr);
             const isOffline =
               (typeof navigator !== "undefined" && !navigator.onLine) ||
-              (bgErr instanceof TypeError && bgErr.message.toLowerCase().includes("fetch")) ||
               (bgErr instanceof Error && bgErr.message.toLowerCase().includes("offline"));
 
             const errMsg = isOffline

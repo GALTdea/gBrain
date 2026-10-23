@@ -17,7 +17,7 @@ export default function ServiceWorkerRegister() {
         .register("/sw.js")
         .then((registration) => {
           // Immediately check for updates
-          registration.update().catch(() => {});
+          registration.update().catch(() => { });
 
           // Detect new workers installing in background
           registration.addEventListener("updatefound", () => {

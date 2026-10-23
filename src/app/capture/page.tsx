@@ -212,7 +212,6 @@ function CaptureInner() {
                   url: shared.url,
                 },
               }),
-              keepalive: true,
             });
 
             if (response.ok) {

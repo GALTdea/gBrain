@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Note } from "@/types/note";
 import { subscribeToUserNotes, deleteNote, saveNote } from "@/lib/notes/notes-service";
 import VoiceRecorder from "@/components/voice/VoiceRecorder";
+import { getVoiceDraft, deleteVoiceDraft } from "@/lib/voice/voice-draft-store";
 
 /**
  * Extracts AI summary and raw transcript from TipTap JSON or plain_text for voice notes.
@@ -174,6 +175,26 @@ export default function NotesDashboard() {
           processingError: undefined,
         });
 
+        // If audio was created while offline or storage URI is not yet ready, load from IndexedDB
+        let audioBase64: string | undefined;
+        let mimeType: string | undefined;
+
+        try {
+          const draft = await getVoiceDraft(note.id);
+          if (draft && draft.chunks && draft.chunks.length > 0) {
+            const combinedBlob = new Blob(draft.chunks, { type: draft.mimeType || "audio/webm" });
+            mimeType = draft.mimeType || "audio/webm";
+            audioBase64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(combinedBlob);
+            });
+          }
+        } catch (draftErr) {
+          console.warn("[Dashboard] Could not read local draft for retry:", draftErr);
+        }
+
         const clientTimeZone =
           Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles";
         const response = await fetch("/api/voice", {
@@ -184,21 +205,30 @@ export default function NotesDashboard() {
             noteId: note.id,
             audioUrl: note.audioUrl,
             audioStorageUri: note.audioStorageUri,
+            audioBase64,
+            mimeType,
             clientTimeZone,
           }),
-          keepalive: true,
         });
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
           throw new Error(err.error || "Retry synthesis failed");
         }
+
+        // Clean up draft in IndexedDB upon successful synthesis
+        await deleteVoiceDraft(note.id).catch(() => {});
       } catch (err) {
         console.error("Retry synthesis error:", err);
+        const isStillOffline = typeof navigator !== "undefined" && !navigator.onLine;
         await saveNote(user.uid, {
           ...note,
-          status: "failed",
-          processingError: err instanceof Error ? err.message : "Retry failed",
+          status: isStillOffline ? "queued" : "failed",
+          processingError: isStillOffline
+            ? "Offline • Audio saved locally. Ready to synthesize when connected."
+            : err instanceof Error
+            ? err.message
+            : "Retry failed",
         });
       }
     },
