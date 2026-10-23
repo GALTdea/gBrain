@@ -33,20 +33,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Safety timeout: Guarantee the app never hangs indefinitely on INITIALIZING
+    const safetyTimeout = setTimeout(() => {
+      setLoading(false);
+    }, 3500);
+
     const unsubscribe = onAuthStateChanged(
       auth,
       (currentUser) => {
+        clearTimeout(safetyTimeout);
         setUser(currentUser);
         setLoading(false);
       },
       (err) => {
+        clearTimeout(safetyTimeout);
         console.error("Auth state error:", err);
         setError(err.message);
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(safetyTimeout);
+      unsubscribe();
+    };
   }, []);
 
   const signInWithEmail = async (email: string, pass: string) => {
